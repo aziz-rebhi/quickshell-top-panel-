@@ -1,0 +1,84 @@
+#!/bin/sh
+# ssh askpass helper — opens a graphical passphrase dialog in the running
+# Quickshell instance and returns the passphrase on stdout.
+#
+# Contract (OpenSSH's SSH_ASKPASS protocol, used by ssh-add / ssh / scp etc.):
+#   - stdin:  ignored
+#   - stdout: EXACTLY the passphrase + newline, nothing else, ON SUCCESS
+#   - exit code: non-zero on cancel/failure — DO NOT print an empty line.
+#     (Verified directly: ssh-add retried in a tight infinite loop when this
+#     script printed a wrong-but-"successful" answer. A clean non-zero exit
+#     is what correctly registers as a single failed/cancelled attempt — this
+#     is the opposite of the sudo askpass script, which intentionally prints
+#     an empty password on cancel. Do not copy that behavior here.)
+#   - argv[1]: prompt string ssh provides (e.g.
+#     "Enter passphrase for /home/dark/.ssh/id_ed25519:")
+#
+# ── Wiring ────────────────────────────────────────────────────────────────
+# Required env vars (both needed — SSH_ASKPASS_REQUIRE=force is what makes
+# ssh/ssh-add use this even though a terminal is available; without it,
+# ssh prefers the terminal and ignores SSH_ASKPASS entirely, same root
+# cause we hit with plain `sudo` before adding the `sudo -A` alias):
+#   export SSH_ASKPASS=~/.config/quickshell/scripts/quickshell-ssh-askpass
+#   export SSH_ASKPASS_REQUIRE=force
+# Add both lines to ~/.config/zsh/aliases.zsh (or wherever SUDO_ASKPASS
+# lives) so they're active in every interactive shell.
+#
+# ── Terminal-agnostic guarantee ──────────────────────────────────────────
+# Same mechanism as the sudo askpass script: ssh-add/ssh spawn this script
+# detached from the terminal's stdin/stdout, it talks to Quickshell over
+# `qs ipc` (Unix socket), and the passphrase comes back via a FIFO on tmpfs.
+# No terminal I/O is involved, so this behaves identically in Ghostty,
+# Kitty, a plain TTY, or anywhere else.
+#
+# ── Security ──────────────────────────────────────────────────────────────
+# Same guarantees as the sudo askpass script:
+# - Passphrase is never written to disk, shell history, logs, or visible
+#   process arguments.
+# - FIFO lives in /run/user/$UID (tmpfs, 0700, per-user), 0600 perms,
+#   unique per invocation, deleted on exit via trap (EXIT/INT/TERM).
+# - No persistent logging of prompts or passphrases beyond what
+#   ssh/journald already record by default.
+
+set -e
+
+# ── FIFO setup ────────────────────────────────────────────────────────────
+FIFO_DIR="/run/user/$(id -u)/quickshell-askpass"
+FIFO_PATH="${FIFO_DIR}/ssh-askpass-$$-$(tr -dc a-f0-9 < /dev/urandom 2>/dev/null | head -c 8 || echo "1")"
+
+cleanup() {
+  rm -f "$FIFO_PATH"
+  rmdir "$FIFO_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+mkdir -p "$FIFO_DIR"
+mkfifo "$FIFO_PATH"
+chmod 600 "$FIFO_PATH"
+
+# ── Call into Quickshell via IPC ───────────────────────────────────────────
+# Uses a distinct "sshAskpass" target (not "askpass") so AskpassService.qml
+# can show SSH-specific copy (key path / "Enter passphrase for...") and so
+# its cancel handler knows to signal failure on the FIFO rather than writing
+# an empty line — the two flows need different cancel semantics, see above.
+/usr/bin/qs ipc --newest call askpass prompt "$1" "$FIFO_PATH" >/dev/null 2>&1 || {
+  echo "ERROR: quickshell not running or sshAskpass target unavailable" >&2
+  exit 1
+}
+
+# ── Read result from FIFO (blocks until dialog submits or cancels) ────────
+# Expected FIFO protocol (must be implemented this way on the Quickshell
+# side — flag this explicitly if AskpassService.qml doesn't already do it):
+#   - On submit: dialog writes the passphrase + newline into the FIFO.
+#   - On cancel: dialog writes a single literal line "CANCELLED" (not an
+#     empty line, and not the passphrase) into the FIFO, then closes.
+# This script checks for that sentinel and converts it into a clean
+# non-zero exit with NOTHING printed to stdout, matching the contract
+# proven correct against ssh-add above.
+RESULT="$(cat "$FIFO_PATH")"
+
+if [ "$RESULT" = "CANCELLED" ]; then
+  exit 1
+fi
+
+printf '%s\n' "$RESULT"

@@ -1,0 +1,84 @@
+#!/bin/sh
+# sudo askpass helper — opens a graphical password dialog in the running
+# Quickshell instance and returns the password on stdout.
+#
+# Contract (sudo's SUDO_ASKPASS protocol):
+#   - stdin:  ignored
+#   - stdout: EXACTLY the password + newline, nothing else
+#   - argv[1]: prompt string from sudo (e.g. "[sudo] password for dark:")
+#
+# ── Wiring ────────────────────────────────────────────────────────────────
+# Option A — env vars + alias in shell profile (active on this system):
+#   export SUDO_ASKPASS=~/.config/quickshell/scripts/quickshell-askpass
+#   export SSH_ASKPASS=~/.config/quickshell/scripts/quickshell-askpass
+#   export SSH_ASKPASS_REQUIRE=force
+#   alias sudo='sudo -A'
+#   (Added to ~/.zshrc; works for both sudo and SSH passphrase prompts.)
+#
+# Option B — per-command (quick test without shell profile changes):
+#   SUDO_ASKPASS=~/.config/quickshell/scripts/quickshell-askpass sudo -A <cmd>
+#
+# Option C — always-on via sudoers drop-in (requires root):
+#   # echo 'Defaults askpass=/home/dark/.config/quickshell/scripts/quickshell-askpass' \
+#   #   | sudo tee /etc/sudoers.d/99-askpass
+#   # sudo visudo -c -f /etc/sudoers.d/99-askpass   # validate syntax
+#   # chmod 440 /etc/sudoers.d/99-askpass
+#   This makes every `sudo <cmd>` use the graphical dialog without -A or aliases.
+#
+# ── Terminal-agnostic guarantee ──────────────────────────────────────────
+# This works identically in Ghostty, Kitty, plain TTY, or any other terminal
+# because the mechanism is entirely outside the terminal:
+#   1. sudo spawns this script as a subprocess (detached from the terminal's
+#      stdin/stdout — the askpass contract replaces stdin/stdout with pipes
+#      to sudo itself).
+#   2. This script does NOT read from or write to the terminal at all.
+#   3. It calls `qs ipc` (a Unix socket connection to the running Quickshell
+#      instance), which shows a FloatingWindow via the Wayland compositor.
+#   4. The password is returned to sudo via a FIFO in /run/user/$UID (tmpfs).
+#   No terminal I/O, no TTY detection, no terminal-specific features are
+#   involved. Switching terminals later cannot break this.
+#
+# ── Security ──────────────────────────────────────────────────────────────
+# - Password is NEVER written to disk, shell history, logs, or process
+#   arguments visible to other users.
+# - FIFO lives in /run/user/$UID (tmpfs, 0700, per-user) with 0600 perms.
+# - FIFO is freshly created per invocation (PID + random suffix) and deleted
+#   on exit via trap, including abnormal exits (INT/TERM).
+# - The only process that sees the password in its argument list is a
+#   short-lived `sh -c "printf ..."` inside Quickshell's own process tree,
+#   visible only to the same UID for milliseconds.
+# - No persistent logging of prompts, passwords, or metadata is added beyond
+#   what sudo/journald already records by default.
+
+set -e
+
+# ── Safety: never log or leak the prompt or password ───────────────────────
+# stderr is reserved for fatal errors only; sudo ignores it, but we keep
+# it clean so nothing accidentally leaks into a log capture.
+
+# ── FIFO setup ──────────────────────────────────────────────────────────────
+# Use /run/user/$UID (tmpfs, 0700, per-user) so the FIFO is private.
+FIFO_DIR="/run/user/$(id -u)/quickshell-askpass"
+FIFO_PATH="${FIFO_DIR}/askpass-$$-$(tr -dc a-f0-9 < /dev/urandom 2>/dev/null | head -c 8 || echo "1")"
+
+cleanup() {
+  rm -f "$FIFO_PATH"
+  rmdir "$FIFO_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+mkdir -p "$FIFO_DIR"
+mkfifo "$FIFO_PATH"
+chmod 600 "$FIFO_PATH"
+
+# ── Call into Quickshell via IPC ────────────────────────────────────────────
+# The function returns void; it shows the dialog and returns immediately.
+# We then block on the FIFO read waiting for the password.
+/usr/bin/qs ipc --newest call askpass prompt "$1" "$FIFO_PATH" >/dev/null 2>&1 || {
+  echo "ERROR: quickshell not running or askpass target unavailable" >&2
+  exit 1
+}
+
+# ── Read password from FIFO (blocks until dialog submits) ──────────────────
+# Output EXACTLY the password + newline to stdout for sudo.
+cat "$FIFO_PATH"

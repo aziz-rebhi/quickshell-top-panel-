@@ -1,0 +1,5 @@
+*.qmlc
+*.jsc
+.qt/
+AGENTS.md
+graphify-out/
