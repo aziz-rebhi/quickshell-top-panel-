@@ -35,10 +35,12 @@ ShellRoot {
 
     MouseArea {
       anchors.fill: parent
-      enabled: clockItem.showPowerMenu || clockItem.showWallpaperMenu
+      enabled: clockItem.showPowerMenu || clockItem.showWallpaperMenu || clockItem.showColorPicker
       onClicked: {
         clockItem.showPowerMenu = false;
         clockItem.showWallpaperMenu = false;
+        if (clockItem.showColorPicker && wallpaperSvc)
+          wallpaperSvc.cancelPick();
       }
     }
 
@@ -87,10 +89,14 @@ ShellRoot {
     stdout: SplitParser {
       onRead: (data) => {
         var flags = data.trim()
-        if (flags.indexOf("p") >= 0 && !clockItem.showAppLauncher)
+        if (flags.indexOf("p") >= 0 && !clockItem.showAppLauncher) {
+          if (clockItem.showColorPicker) wallpaperSvc.cancelPick();
           clockItem.showPowerMenu = true
-        if (flags.indexOf("a") >= 0 && !clockItem.showPowerMenu)
+        }
+        if (flags.indexOf("a") >= 0 && !clockItem.showPowerMenu) {
+          if (clockItem.showColorPicker) wallpaperSvc.cancelPick();
           clockItem.showAppLauncher = true
+        }
         if (flags.indexOf("w") >= 0)
           clockItem.showWallpaperMenu = !clockItem.showWallpaperMenu
         if (flags.indexOf("m") >= 0) {

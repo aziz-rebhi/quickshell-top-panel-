@@ -165,6 +165,18 @@ Rectangle {
     onTriggered: clockWidget.showWallpaperMenu = false
   }
 
+  // --- Color picker state ---
+  property bool showColorPicker: false
+  property var colorPickColors: []
+  property bool colorPickLoading: false
+  property Timer colorPickerTimer: Timer {
+    interval: 30000
+    onTriggered: {
+      if (clockWidget.wallpaperSvc)
+        clockWidget.wallpaperSvc.applyDefaultColor()
+    }
+  }
+
   // --- Notification state ---
   // Set from shell.qml via the latestNotification property binding.
   // When non-null, the island auto-expands to show the Dynamic Island banner.
@@ -233,12 +245,42 @@ Rectangle {
     }
   }
 
+  // --- Color picker lifecycle ---
+  onShowColorPickerChanged: {
+    if (showColorPicker) {
+      if (showPowerMenu) showPowerMenu = false;
+      if (showAppLauncher) showAppLauncher = false;
+      if (showWallpaperMenu) showWallpaperMenu = false;
+      if (colorPickerTimer) colorPickerTimer.restart();
+    }
+  }
+
+  Connections {
+    target: clockWidget.wallpaperSvc
+    function onPickingColorChanged() {
+      clockWidget.showColorPicker = clockWidget.wallpaperSvc
+        ? clockWidget.wallpaperSvc.pickingColor : false
+    }
+    function onCandidateColorsChanged() {
+      if (clockWidget.wallpaperSvc)
+        clockWidget.colorPickColors = clockWidget.wallpaperSvc.candidateColors
+    }
+    function onColorPickLoadingChanged() {
+      if (clockWidget.wallpaperSvc)
+        clockWidget.colorPickLoading = clockWidget.wallpaperSvc.colorPickLoading
+    }
+    function onColorApplied() {
+      clockWidget.showColorPicker = false
+    }
+  }
+
   // --- Notification lifecycle ---
   onLatestNotificationDataChanged: {
     if (_ready && latestNotificationData) {
       if (showPowerMenu) showPowerMenu = false;
       if (showAppLauncher) showAppLauncher = false;
       if (showWallpaperMenu) showWallpaperMenu = false;
+      if (showColorPicker && wallpaperSvc) wallpaperSvc.cancelPick();
       if (notifUnpinTimer) notifUnpinTimer.restart();
     }
   }
@@ -276,9 +318,9 @@ Rectangle {
 
   // Size changes are the core of the Dynamic Island morph.
   // Regular expanded = 64×540; notification/power = 130×480; app launcher = 240×480; askpass = 200×480; collapsed = 36×auto.
-  height: showAppLauncher ? 240 : (showWallpaperMenu ? 300 : (showAskpass ? 200 : (latestNotificationData || showPowerMenu ? 130 : (isExpanded ? 64 : 36))))
-  width: showWallpaperMenu ? 640 : (showAskpass || latestNotificationData || showPowerMenu || showAppLauncher ? 480 : (isExpanded ? 540 : (mode !== "default" ? indicatorRow.implicitWidth + 86 : collapsedRow.implicitWidth + 86)))
-  radius: showWallpaperMenu ? 28 : (showAskpass || latestNotificationData || showPowerMenu || showAppLauncher ? 28 : (isExpanded ? 22 : 18))
+  height: showAppLauncher ? 240 : (showWallpaperMenu ? 300 : (showAskpass ? 200 : (showColorPicker || latestNotificationData || showPowerMenu ? 130 : (isExpanded ? 64 : 36))))
+  width: showWallpaperMenu ? 640 : (showAskpass || showColorPicker || latestNotificationData || showPowerMenu || showAppLauncher ? 480 : (isExpanded ? 540 : (mode !== "default" ? indicatorRow.implicitWidth + 86 : collapsedRow.implicitWidth + 86)))
+  radius: showColorPicker ? 28 : (showWallpaperMenu ? 28 : (showAskpass || latestNotificationData || showPowerMenu || showAppLauncher ? 28 : (isExpanded ? 22 : 18)))
   color: Theme.background
 
   // Elastic morph animation for regular expand/collapse
@@ -642,6 +684,19 @@ Rectangle {
           }
       }
     }
+  }
+
+  ColorPicker {
+    id: colorPickerOverlay
+    anchors.centerIn: parent
+    colors: clockWidget.colorPickColors
+    loading: clockWidget.colorPickLoading
+    wallService: clockWidget.wallpaperSvc
+    onDismissed: {
+      if (clockWidget.wallpaperSvc)
+        clockWidget.wallpaperSvc.cancelPick()
+    }
+    visible: clockWidget.showColorPicker
   }
 
   NotificationBanner {

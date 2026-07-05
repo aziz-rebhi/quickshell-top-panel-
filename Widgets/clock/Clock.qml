@@ -14,6 +14,7 @@ Item {
   property alias showPowerMenu: mainWidget.showPowerMenu
   property alias showAskpass: mainWidget.showAskpass
   property alias showAppLauncher: mainWidget.showAppLauncher
+  property alias showColorPicker: mainWidget.showColorPicker
   property alias showWallpaperMenu: mainWidget.showWallpaperMenu
   property alias wallpaperSvc: mainWidget.wallpaperSvc
   property alias modeSvc: mainWidget.modeSvc
