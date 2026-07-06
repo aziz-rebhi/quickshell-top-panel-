@@ -55,13 +55,14 @@ PanelWindow {
 
     function _addAudioNode(node) {
         if (!node || !node.ready) return;
-        if (node.type === PwNodeType.AudioSink) {
+        if ((node.type & PwNodeType.Sink) && !(node.type & PwNodeType.Video)) {
             if (audioSinks.indexOf(node) !== -1) return;
             var s = audioSinks.slice();
             s.push(node);
             s.sort(function(a, b) { return (a.description || a.name || "").localeCompare(b.description || b.name || ""); });
             audioSinks = s;
-        } else if (node.type === PwNodeType.AudioSource) {
+        }
+        if ((node.type & PwNodeType.Source) && !(node.type & PwNodeType.Video)) {
             if (audioSources.indexOf(node) !== -1) return;
             var s2 = audioSources.slice();
             s2.push(node);
@@ -76,22 +77,34 @@ PanelWindow {
         audioSources = audioSources.filter(function(n) { return n !== node; });
     }
 
-    // Bind the default audio sink/source so their volume/muted setters work
+    // All non-stream, non-video sink/source nodes currently known to Pipewire.
+    // Re-evaluated automatically whenever Pipewire.nodes.values changes.
+    function _audioCandidateNodes() {
+        var allNodes = Pipewire.nodes.values;
+        var out = [];
+        for (var i = 0; i < allNodes.length; i++) {
+            var n = allNodes[i];
+            if (n && !(n.type & PwNodeType.Stream) && !(n.type & PwNodeType.Video) && (n.type & PwNodeType.Sink || n.type & PwNodeType.Source)) {
+                out.push(n);
+            }
+        }
+        return out;
+    }
+
+    // Track EVERY candidate sink/source, not just the current default.
+    // A PwNode's properties (.ready, .audio, .description, ...) are only populated
+    // by Pipewire once the node is bound via PwObjectTracker. Previously only the
+    // default sink/source were tracked, so any non-default device (HDMI output,
+    // a headset mic, etc.) never became "ready" and was silently filtered out by
+    // _syncAudioNodes below, even though it passed the type bitmask check.
     PwObjectTracker {
-        objects: [controlCenter.audioSink, controlCenter.audioSource]
+        objects: controlCenter._audioCandidateNodes()
     }
 
     // Listen to Pipewire node changes instead of polling every 500ms
     function _syncAudioNodes() {
         try {
-            var allNodes = Pipewire.nodes.values;
-            var nodes = [];
-            for (var i = 0; i < allNodes.length; i++) {
-                var n = allNodes[i];
-                if (n && (n.type === PwNodeType.AudioSink || n.type === PwNodeType.AudioSource)) {
-                    nodes.push(n);
-                }
-            }
+            var nodes = controlCenter._audioCandidateNodes();
             audioSinks = audioSinks.filter(function(n) { return nodes.indexOf(n) !== -1; });
             audioSources = audioSources.filter(function(n) { return nodes.indexOf(n) !== -1; });
             for (var i = 0; i < nodes.length; i++) {
