@@ -45,16 +45,16 @@ PanelWindow {
     // --- Audio (Pipewire) ---
     property PwNode audioSink: Pipewire.defaultAudioSink
     property PwNode audioSource: Pipewire.defaultAudioSource
-    property bool audioMuted: !!audioSink?.audio?.muted
-    property bool audioSourceMuted: !!audioSource?.audio?.muted
-    property real audioVolume: Math.min(1, Math.max(0, audioSink?.audio?.volume ?? 0))
-    property real audioSourceVolume: Math.min(1, Math.max(0, audioSource?.audio?.volume ?? 0))
+    property bool audioMuted: false
+    property bool audioSourceMuted: false
+    property real audioVolume: 0
+    property real audioSourceVolume: 0
 
     property var audioSinks: []
     property var audioSources: []
 
     function _addAudioNode(node) {
-        if (!node || !node.ready) return;
+        if (!node) return;
         if ((node.type & PwNodeType.Sink) && !(node.type & PwNodeType.Video)) {
             if (audioSinks.indexOf(node) !== -1) return;
             var s = audioSinks.slice();
@@ -91,14 +91,9 @@ PanelWindow {
         return out;
     }
 
-    // Track EVERY candidate sink/source, not just the current default.
-    // A PwNode's properties (.ready, .audio, .description, ...) are only populated
-    // by Pipewire once the node is bound via PwObjectTracker. Previously only the
-    // default sink/source were tracked, so any non-default device (HDMI output,
-    // a headset mic, etc.) never became "ready" and was silently filtered out by
-    // _syncAudioNodes below, even though it passed the type bitmask check.
+    // Track the default sink/source so their audio properties stay populated.
     PwObjectTracker {
-        objects: controlCenter._audioCandidateNodes()
+        objects: [controlCenter.audioSink, controlCenter.audioSource]
     }
 
     // Listen to Pipewire node changes instead of polling every 500ms
@@ -108,28 +103,64 @@ PanelWindow {
             audioSinks = audioSinks.filter(function(n) { return nodes.indexOf(n) !== -1; });
             audioSources = audioSources.filter(function(n) { return nodes.indexOf(n) !== -1; });
             for (var i = 0; i < nodes.length; i++) {
-                if (nodes[i] && nodes[i].ready) controlCenter._addAudioNode(nodes[i]);
+                if (nodes[i]) controlCenter._addAudioNode(nodes[i]);
             }
         } catch (e) {}
     }
 
     // Sync audio nodes on a timer (Pipewire doesn't expose a node change signal)
     Timer {
+        id: nodeSyncTimer
         interval: 2000; repeat: true; running: true
         onTriggered: _syncAudioNodes()
     }
 
-    function setAudioSourceVolume(vol) {
-        if (audioSource?.ready && audioSource?.audio) {
-            audioSource.audio.muted = false;
-            audioSource.audio.volume = Math.max(0, Math.min(1, vol));
+    // Poll volume/muted state since PwNode.audio has no notify signal for binding tracking
+    Timer {
+        interval: 150; repeat: true; running: true
+        onTriggered: {
+            if (audioSink && audioSink.audio) {
+                audioVolume = Math.min(1, Math.max(0, audioSink.audio.volume));
+                audioMuted = audioSink.audio.muted;
+            }
+            if (audioSource && audioSource.audio) {
+                audioSourceVolume = Math.min(1, Math.max(0, audioSource.audio.volume));
+                audioSourceMuted = audioSource.audio.muted;
+            }
         }
     }
 
+    // Volume/mute via shell command (Pipewire API's setAverageVolume may not propagate)
+    Process { id: audioVolumeProc }
+
+    function _setNodeVolume(node, vol) {
+        if (!node) return;
+        var clamped = Math.max(0, Math.min(1, vol));
+        var pct = Math.round(clamped * 100);
+        audioVolumeProc.command = ["sh", "-c",
+            "wpctl set-volume " + node.id + " " + clamped + " 2>/dev/null || " +
+            "pactl set-sink-volume " + node.id + " " + pct + "% 2>/dev/null || " +
+            "pw-cli set-param " + node.id + " Props '{ volume: " + clamped + ", mute: false }'"
+        ];
+        audioVolumeProc.running = true;
+    }
+
+    function _toggleNodeMute(node) {
+        if (!node) return;
+        audioVolumeProc.command = ["sh", "-c",
+            "wpctl set-mute " + node.id + " toggle 2>/dev/null || " +
+            "pactl set-sink-mute " + node.id + " toggle 2>/dev/null || " +
+            "pw-cli set-param " + node.id + " Props '{ mute: true }'"
+        ];
+        audioVolumeProc.running = true;
+    }
+
+    function setAudioSourceVolume(vol) {
+        _setNodeVolume(Pipewire.defaultAudioSource, vol);
+    }
+
     function toggleAudioSourceMute() {
-        if (audioSource?.ready && audioSource?.audio) {
-            audioSource.audio.muted = !audioSource.audio.muted;
-        }
+        _toggleNodeMute(Pipewire.defaultAudioSource);
     }
 
     function setDefaultSink(node) {
@@ -141,16 +172,11 @@ PanelWindow {
     }
 
     function setVolume(vol) {
-        if (audioSink?.ready && audioSink?.audio) {
-            audioSink.audio.muted = false;
-            audioSink.audio.volume = Math.max(0, Math.min(1, vol));
-        }
+        _setNodeVolume(Pipewire.defaultAudioSink, vol);
     }
 
     function toggleMute() {
-        if (audioSink?.ready && audioSink?.audio) {
-            audioSink.audio.muted = !audioSink.audio.muted;
-        }
+        _toggleNodeMute(Pipewire.defaultAudioSink);
     }
 
     function volumeIcon(vol, muted) {
