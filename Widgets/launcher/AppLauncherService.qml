@@ -16,6 +16,17 @@ QtObject {
     p.running = true;
   }
 
+  function rescan() {
+    scanProc.exec();
+  }
+
+  property Timer rescanTimer: Timer {
+    interval: 10000
+    running: true
+    repeat: true
+    onTriggered: appService.rescan()
+  }
+
   property Process scanProc: Process {
     command: ["sh", "-c",
       "XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}; " +
@@ -50,14 +61,20 @@ QtObject {
       "          [ -f \"$icc\" ] && iconpath=\"$icc\" && break 2; " +
       "        done; " +
       "      done; " +
-      "      [ -z \"$iconpath\" ] && for ext in png xpm svg; do " +
-      "        [ -f \"/usr/share/pixmaps/${icon}.${ext}\" ] && iconpath=\"/usr/share/pixmaps/${icon}.${ext}\" && break; " +
-      "      done; " +
-      "      [ -z \"$iconpath\" ] && for idir in $ICON_DIRS; do " +
-      "        icc=\"$idir/${icon}.png\"; [ -f \"$icc\" ] && iconpath=\"$icc\" && break; " +
-      "        icc=\"$idir/${icon}.svg\"; [ -f \"$icc\" ] && iconpath=\"$icc\" && break; " +
-      "      done; " +
       "    fi; " +
+      "    [ -z \"$iconpath\" ] && for idir in $ICON_DIRS; do " +
+      "      for ext in png svg; do " +
+      "        icc=$(find -L \"$idir\" -maxdepth 4 -name \"${icon}.${ext}\" -print -quit 2>/dev/null); " +
+      "        [ -n \"$icc\" ] && iconpath=\"$icc\" && break 2; " +
+      "      done; " +
+      "    done; " +
+      "    [ -z \"$iconpath\" ] && for ext in png xpm svg; do " +
+      "      [ -f \"/usr/share/pixmaps/${icon}.${ext}\" ] && iconpath=\"/usr/share/pixmaps/${icon}.${ext}\" && break; " +
+      "    done; " +
+      "    [ -z \"$iconpath\" ] && for idir in $ICON_DIRS; do " +
+      "      [ -f \"$idir/${icon}.png\" ] && { iconpath=\"$idir/${icon}.png\"; break; }; " +
+      "      [ -f \"$idir/${icon}.svg\" ] && { iconpath=\"$idir/${icon}.svg\"; break; }; " +
+      "    done; " +
       "    echo \"${name}|${iconpath:-${icon}}|${id}\"; " +
       "  done; " +
       "done | sort -f"
