@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import "../core"
 
 QtObject {
   id: appService
@@ -11,9 +12,7 @@ QtObject {
     var cmd = "gtk-launch " + desktopId + " 2>/dev/null";
     cmd += " || dex " + desktopId + " 2>/dev/null";
     cmd += ' || f=$(find /usr/share/applications $HOME/.local/share/applications /var/lib/flatpak/exports/share/applications $HOME/.local/share/flatpak/exports/share/applications -name "' + desktopId + '.desktop" 2>/dev/null | head -1); [ -n "$f" ] && eval $(grep -m1 "^Exec=" "$f" | cut -d= -f2- | sed "s/%[[:alpha:]]//g") 2>/dev/null';
-    var p = Qt.createQmlObject('import QtQuick; import Quickshell.Io; Process { command: ["sh", "-c", ' + JSON.stringify(cmd) + '] }', appService);
-    p.exited.connect(function() { p.destroy() });
-    p.running = true;
+    RunProcess.run(["sh", "-c", cmd], appService);
   }
 
   function rescan() {

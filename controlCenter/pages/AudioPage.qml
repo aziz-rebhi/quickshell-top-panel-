@@ -6,7 +6,6 @@ import "../../core"
 
 ScrollView {
   id: sv
-  visible: false
   padding: 0
   ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
   ScrollBar.vertical.policy: ScrollBar.AsNeeded
@@ -20,7 +19,7 @@ ScrollView {
   property bool audioMuted: false
   property real audioSourceVolume: 0
   property bool audioSourceMuted: false
-  property var volumeIcon: null
+
 
   signal backRequested()
   signal setVolume(real vol)
@@ -94,7 +93,7 @@ ScrollView {
 
     IconSlider {
       Layout.fillWidth: true
-      iconText: volumeIcon ? volumeIcon(audioVolume, audioMuted) : ""
+      iconText: Helpers.volumeIcon(audioVolume, audioMuted)
       value: audioMuted ? 0 : audioVolume
       onMoved: val => setVolume(val)
     }
@@ -161,7 +160,7 @@ ScrollView {
 
     IconSlider {
       Layout.fillWidth: true
-      iconText: volumeIcon ? volumeIcon(audioSourceVolume, audioSourceMuted) : ""
+      iconText: Helpers.volumeIcon(audioSourceVolume, audioSourceMuted)
       value: audioSourceMuted ? 0 : audioSourceVolume
       onMoved: val => setAudioSourceVolume(val)
     }

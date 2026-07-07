@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import "../../core"
 
 QtObject {
   property string playerStatus: "Stopped"
@@ -61,12 +62,6 @@ QtObject {
     }
   }
 
-  function youtubeThumb(url) {
-    if (!url) return "";
-    var match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    return match ? "https://img.youtube.com/vi/" + match[1] + "/hqdefault.jpg" : "";
-  }
-
   function previous() {
     transportProc.command = ["playerctl", "--player=playerctld", "previous"];
     transportProc.running = true;
@@ -116,7 +111,7 @@ QtObject {
         else if (artUrl)
           newArt = artUrl;
         else if (pageUrl)
-          newArt = youtubeThumb(pageUrl);
+          newArt = Helpers.youtubeThumb(pageUrl);
 
         if (newArt)
           art = newArt;

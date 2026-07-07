@@ -11,6 +11,7 @@ import "../power"
 import "../wallpaper"
 import "../askpass"
 import "../../core"
+import "../weather"
 
 Rectangle {
   id: clockWidget
@@ -55,13 +56,6 @@ Rectangle {
     }
   }
 
-  function volumeIcon(vol, muted) {
-    if (muted || vol <= 0) return "󰝟";
-    if (vol < 0.34) return "󰕿";
-    if (vol < 0.67) return "󰖀";
-    return "󰕾";
-  }
-
   // --- Combined polling: brightness, caps lock, num lock ---
   property real brightness: 0
   property bool capsLock: false
@@ -75,7 +69,7 @@ Rectangle {
       "  c=$(cat /sys/class/leds/*capslock*/brightness 2>/dev/null | head -1 || echo 0); " +
       "  n=$(cat /sys/class/leds/*numlock*/brightness 2>/dev/null | head -1 || echo 0); " +
       "  echo \"b=$b\"; echo \"c=$c\"; echo \"n=$n\"; " +
-      "  sleep 0.05; " +
+      "  sleep 1; " +
       "done"
     ]
     running: true
@@ -103,12 +97,6 @@ Rectangle {
     }
   }
 
-  function brightnessIcon(val) {
-    if (val < 0.34) return "󰃞";
-    if (val < 0.67) return "󰃟";
-    return "󰃠";
-  }
-
   onNumLockChanged: {
     if (_ready && !clockWidget.isExpanded) {
       mode = "numlock";
@@ -133,9 +121,7 @@ Rectangle {
   }
 
   function powerAction(cmd) {
-    var p = Qt.createQmlObject('import QtQuick; import Quickshell.Io; Process { command: ' + JSON.stringify(cmd) + ' }', clockWidget);
-    p.exited.connect(function() { p.destroy() });
-    p.running = true;
+    RunProcess.run(cmd, clockWidget);
     clockWidget.showPowerMenu = false;
   }
 
@@ -309,8 +295,16 @@ Rectangle {
     onTriggered: mode = "default"
   }
 
+  // --- Weather ---
+  property bool showWeather: false
+  property Timer weatherTimer: Timer {
+    interval: 5000
+    onTriggered: clockWidget.showWeather = false
+  }
+
   // --- Layout ---
   MediaService { id: media }
+  WeatherService { id: weatherSvc }
 
   // --- Askpass dialog state ---
   property var askpassSvc: null
@@ -409,7 +403,7 @@ Rectangle {
       visible: clockWidget.mode === "volume"
 
       Text {
-        text: clockWidget.volumeIcon(clockWidget.volume, clockWidget.audioMuted)
+        text: Helpers.volumeIcon(clockWidget.volume, clockWidget.audioMuted)
         color: clockWidget.audioMuted ? Theme.subtext : Theme.primary
         font { family: "JetBrainsMono Nerd Font"; pixelSize: 18 }
         Behavior on color { ColorAnimation { duration: 120 } }
@@ -444,7 +438,7 @@ Rectangle {
       visible: clockWidget.mode === "brightness"
 
       Text {
-        text: clockWidget.brightnessIcon(clockWidget.brightness)
+        text: Helpers.brightnessIcon(clockWidget.brightness)
         color: Qt.rgba(
           0.89, 0.7 + 0.25 * clockWidget.brightness, 0.25,
           0.4 + 0.6 * clockWidget.brightness
@@ -579,8 +573,17 @@ Rectangle {
       anchors.centerIn: parent
       spacing: 4
 
+      WeatherWidget {
+        visible: clockWidget.showWeather
+        temperature: weatherSvc.temperature
+        weatherCode: weatherSvc.weatherCode
+        city: weatherSvc.city
+        Layout.alignment: Qt.AlignHCenter
+      }
+
       Text {
         text: Qt.formatDateTime(clock.date, "HH:mm")
+        visible: !clockWidget.showWeather
         color: Theme.text
         Layout.alignment: Qt.AlignHCenter
         font { family: "Inter"; pixelSize: 20; weight: 700 }
@@ -588,10 +591,25 @@ Rectangle {
 
       Text {
         text: Qt.formatDateTime(clock.date, "ddd, MMM d")
+        visible: !clockWidget.showWeather
         color: Theme.text
         opacity: 0.5
         Layout.alignment: Qt.AlignHCenter
         font { family: "Inter"; pixelSize: 11; weight: 500 }
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: {
+          if (clockWidget.showWeather) {
+            clockWidget.showWeather = false;
+          } else {
+            clockWidget.showWeather = true;
+            weatherSvc.fetchWeather();
+            clockWidget.weatherTimer.restart();
+          }
+        }
       }
     }
 

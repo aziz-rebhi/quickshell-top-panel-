@@ -69,7 +69,7 @@ Rectangle {
         }
 
         Text {
-          text: root.notificationData ? relTime(root.notificationData.timestamp) : ""
+          text: root.notificationData ? Helpers.relTime(root.notificationData.timestamp) : ""
           color: Theme.muted
           font { family: "Inter"; pixelSize: 9; weight: 500 }
           opacity: 0.7
@@ -189,15 +189,6 @@ Rectangle {
       if (Math.abs(root.dragOffset) < 10)
         root.dismissed(root.notificationData);
     }
-  }
-
-  function relTime(ts) {
-    if (!ts) return "";
-    var diff = Date.now() - ts;
-    if (diff < 60000) return "now";
-    if (diff < 3600000) return Math.floor(diff / 60000) + "m";
-    if (diff < 86400000) return Math.floor(diff / 3600000) + "h";
-    return Math.floor(diff / 86400000) + "d";
   }
 
   states: [

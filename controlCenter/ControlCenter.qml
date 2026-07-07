@@ -118,7 +118,7 @@ PanelWindow {
 
     // Poll volume/muted state since PwNode.audio has no notify signal for binding tracking
     Timer {
-        interval: 150; repeat: true; running: true
+        interval: 500; repeat: true; running: true
         onTriggered: {
             if (audioSink && audioSink.audio) {
                 audioVolume = Math.min(1, Math.max(0, audioSink.audio.volume));
@@ -178,13 +178,6 @@ PanelWindow {
 
     function toggleMute() {
         _toggleNodeMute(Pipewire.defaultAudioSink);
-    }
-
-    function volumeIcon(vol, muted) {
-        if (muted || vol <= 0) return "󰝟";
-        if (vol < 0.34) return "󰕿";
-        if (vol < 0.67) return "󰖀";
-        return "󰕾";
     }
 
     // --- Wi-Fi ---
@@ -556,11 +549,7 @@ PanelWindow {
 
     Process { id: brightnessSetProc }
 
-    function brightnessIcon(val) {
-        if (val < 0.34) return "󰃞";
-        if (val < 0.67) return "󰃟";
-        return "󰃠";
-    }
+
 
     // --- Media player (via MediaService singleton) ---
     property QtObject activePlayer: QtObject {
@@ -669,14 +658,12 @@ PanelWindow {
                 modeSvc: controlCenter.modeSvc
                 wifiEnabled: controlCenter.wifiEnabled
                 wifiName: controlCenter.wifiName
-                volumeIcon: controlCenter.volumeIcon
                 audioVolume: controlCenter.audioVolume
                 audioMuted: controlCenter.audioMuted
                 audioSink: controlCenter.audioSink
                 btAdapter: controlCenter.btAdapter
                 nlEnabled: controlCenter.nlEnabled
                 doNotDisturb: controlCenter.doNotDisturb
-                brightnessIcon: controlCenter.brightnessIcon
                 brightness: controlCenter.brightness
                 activePlayer: controlCenter.activePlayer
                 playerArt: controlCenter.playerArt
@@ -750,7 +737,6 @@ PanelWindow {
               audioMuted: controlCenter.audioMuted
               audioSourceVolume: controlCenter.audioSourceVolume
               audioSourceMuted: controlCenter.audioSourceMuted
-              volumeIcon: controlCenter.volumeIcon
               onBackRequested: controlCenter.page = "main"
               onSetVolume: (v) => controlCenter.setVolume(v)
               onToggleMute: controlCenter.toggleMute()

@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import "../core"
 
 /*
  * nbfc set -s <speed> overrides the laptop's automatic temperature-based
@@ -25,6 +26,8 @@ QtObject {
   property FileView _stateReader: FileView {
     path: statePath
     preload: true
+    onLoaded: _restoreState()
+    onTextChanged: _restoreState()
   }
 
   // Always poll temperature; watchdog logic is inside onStreamFinished
@@ -62,9 +65,7 @@ QtObject {
 
   function _forceRevert() {
     currentMode = "balanced";
-    var p = Qt.createQmlObject('import QtQuick; import Quickshell.Io; Process { command: ["nbfc", "set", "-a"] }', _root);
-    p.exited.connect(function() { p.destroy(); });
-    p.running = true;
+    RunProcess.run(["nbfc", "set", "-a"], _root);
     _saveState();
   }
 
@@ -126,36 +127,32 @@ QtObject {
     if (_saving) return;
     _saving = true;
     var data = JSON.stringify({ mode: currentMode });
-    var p = Qt.createQmlObject(
-      'import QtQuick; import Quickshell.Io; Process { command: ["sh", "-c", ' +
-      JSON.stringify("mkdir -p $(dirname \"" + statePath + "\") && printf '%s\\n' \"" +
+    var p = RunProcess.run([
+      "sh", "-c",
+      "mkdir -p $(dirname \"" + statePath + "\") && printf '%s\\n' \"" +
         data.replace(/\"/g, '\\"') + "\" > \"" + statePath + ".tmp\" && mv -f \"" +
-        statePath + ".tmp\" \"" + statePath + "\"") +
-      '] }', _root);
-    p.exited.connect(function() { _saving = false; p.destroy(); });
-    p.running = true;
+        statePath + ".tmp\" \"" + statePath + "\""
+    ], _root);
+    p.exited.connect(function() { _saving = false; });
   }
 
-  Component.onCompleted: {
-    _sampleTemp();
-
+  function _restoreState() {
     var raw = _stateReader.text().trim();
-    if (!raw) {
-      currentMode = "balanced";
-      _applying = false;
-      return;
-    }
+    if (!raw) return;
     try {
       var s = JSON.parse(raw);
       if (s.mode === "silent" || s.mode === "performance") {
         setMode(s.mode);
-      } else {
-        currentMode = "balanced";
       }
     } catch(e) {
       console.warn("ModeService: invalid state file, defaulting to balanced");
       currentMode = "balanced";
       _applying = false;
     }
+  }
+
+  Component.onCompleted: {
+    _sampleTemp();
+    _restoreState();
   }
 }

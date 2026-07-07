@@ -83,7 +83,7 @@ ShellRoot {
       "  test -f /tmp/qs-mode-cycle && rm /tmp/qs-mode-cycle && out=\"${out}m\"; " +
       "  test -f /tmp/qs-toggle-cc && rm /tmp/qs-toggle-cc && out=\"${out}c\"; " +
       "  if [ -n \"$out\" ]; then echo \"$out\"; fi; " +
-      "  sleep 0.05; " +
+      "  sleep 0.5; " +
       "done"
     ]
     stdout: SplitParser {

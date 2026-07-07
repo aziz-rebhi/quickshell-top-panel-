@@ -11,14 +11,12 @@ ColumnLayout {
   property var modeSvc: null
   property bool wifiEnabled: false
   property string wifiName: ""
-  property var volumeIcon
   property real audioVolume: 0
   property bool audioMuted: false
   property var audioSink
   property var btAdapter
   property bool nlEnabled: false
   property bool doNotDisturb: false
-  property var brightnessIcon
   property real brightness: 0
   property var activePlayer
   property string playerArt: ""
@@ -73,7 +71,7 @@ ColumnLayout {
     }
 
     ToggleTile {
-      iconText: volumeIcon(audioVolume, audioMuted)
+      iconText: Helpers.volumeIcon(audioVolume, audioMuted)
       label: "Audio"
       sublabel: audioMuted ? "Muted" : (audioSink?.description || audioSink?.name || "Speaker")
       active: !audioMuted
@@ -116,13 +114,13 @@ ColumnLayout {
   }
 
   IconSlider {
-    iconText: volumeIcon(audioVolume, audioMuted)
+    iconText: Helpers.volumeIcon(audioVolume, audioMuted)
     value: audioMuted ? 0 : audioVolume
     onMoved: val => setVolume(val)
   }
 
   IconSlider {
-    iconText: brightnessIcon(brightness)
+    iconText: Helpers.brightnessIcon(brightness)
     value: brightness
     onMoved: val => setBrightness(val)
   }

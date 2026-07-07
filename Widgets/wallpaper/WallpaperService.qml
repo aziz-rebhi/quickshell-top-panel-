@@ -10,6 +10,7 @@ QtObject {
   property var candidateColors: []
   property bool pickingColor: false
   property bool colorPickLoading: false
+  property string _pendingWallpaper: ""
 
   signal wallpaperApplied(string path)
   signal colorsReady(var colors)
@@ -54,6 +55,10 @@ QtObject {
               svc.candidateColors = parsed
               svc.pickingColor = true
               svc.colorsReady(parsed)
+              if (svc._pendingWallpaper) {
+                svc.wallpaperApplied(svc._pendingWallpaper)
+                svc._pendingWallpaper = ""
+              }
               return
             }
           } catch (e) {
@@ -63,6 +68,10 @@ QtObject {
         // Fallback: apply default
         svc.candidateColors = []
         svc.pickingColor = false
+        if (svc._pendingWallpaper) {
+          svc.wallpaperApplied(svc._pendingWallpaper)
+          svc._pendingWallpaper = ""
+        }
         svc.applyDefaultColor()
       }
     }
@@ -107,9 +116,9 @@ QtObject {
 
   function applyWallpaper(path) {
     console.log("applying wallpaper with color pick:", path)
+    svc._pendingWallpaper = path
     svc.setWallpaperOnly(path)
     svc.extractColors(path)
-    svc.wallpaperApplied(path)
   }
 
   function applySourceColor(hex) {

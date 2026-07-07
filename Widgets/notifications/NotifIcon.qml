@@ -51,8 +51,4 @@ Item {
   }
 
   onAppIconChanged: startResolve(appIcon)
-
-  Component.onCompleted: {
-    if (appIcon) startResolve(appIcon);
-  }
 }

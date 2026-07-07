@@ -49,16 +49,6 @@ Rectangle {
     return historyRoot.expandedGroups[appName || "Unknown"] === true;
   }
 
-  function relTime(ts) {
-    if (!ts) return "";
-    var diff = Date.now() - ts;
-    if (diff < 60000) return "now";
-    if (diff < 3600000) return Math.floor(diff / 60000) + "m ago";
-    if (diff < 86400000) return Math.floor(diff / 3600000) + "h ago";
-    var days = Math.floor(diff / 86400000);
-    return days === 1 ? "Yesterday" : days + "d ago";
-  }
-
   readonly property var groupedNotifs: buildGroups(storedNotifications)
 
   ColumnLayout {
@@ -221,7 +211,7 @@ Rectangle {
                           }
 
                           Text {
-                            text: historyRoot.relTime(modelData.timestamp)
+                            text: Helpers.relTime(modelData.timestamp)
                             color: Theme.muted
                             font { family: "Inter"; pixelSize: 9; weight: 500 }
                             opacity: 0.6
