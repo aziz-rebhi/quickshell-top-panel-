@@ -318,15 +318,15 @@ Rectangle {
 
   // Size changes are the core of the Dynamic Island morph.
   // Regular expanded = 64×540; notification/power = 130×480; app launcher = 240×480; askpass = 200×480; collapsed = 36×auto.
-  height: showAppLauncher ? 240 : (showWallpaperMenu ? 300 : (showAskpass ? 200 : (showColorPicker || latestNotificationData || showPowerMenu ? 130 : (isExpanded ? 64 : 36))))
+  height: showAppLauncher ? 240 : (showWallpaperMenu ? 300 : (showAskpass ? 200 : (showColorPicker || latestNotificationData || showPowerMenu ? 130 : (isExpanded ? 84 : 36))))
   width: showWallpaperMenu ? 640 : (showAskpass || showColorPicker || latestNotificationData || showPowerMenu || showAppLauncher ? 480 : (isExpanded ? 540 : (mode !== "default" ? indicatorRow.implicitWidth + 86 : collapsedRow.implicitWidth + 86)))
   radius: showColorPicker ? 28 : (showWallpaperMenu ? 28 : (showAskpass || latestNotificationData || showPowerMenu || showAppLauncher ? 28 : (isExpanded ? 22 : 18)))
   color: Theme.background
 
   // Elastic morph animation for regular expand/collapse
-  Behavior on height { NumberAnimation { duration: 450; easing.type: Easing.OutBack } }
-  Behavior on width  { NumberAnimation { duration: 450; easing.type: Easing.OutBack } }
-  Behavior on radius { NumberAnimation { duration: 450; easing.type: Easing.OutBack } }
+  Behavior on height { NumberAnimation { duration: 450; easing.type: Easing.OutQuart } }
+  Behavior on width  { NumberAnimation { duration: 450; easing.type: Easing.OutQuart } }
+  Behavior on radius { NumberAnimation { duration: 450; easing.type: Easing.OutQuart } }
 
   MouseArea {
     id: mouseArea
@@ -562,8 +562,11 @@ Rectangle {
     Behavior on opacity { NumberAnimation { duration: 150 } }
 
     MediaSection {
+      id: mediaSection
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
+      width: Math.min(implicitWidth, (parent.width - clockView.implicitWidth) / 2 - 8)
+      clip: true
       trackTitle: media.title
       trackArtist: media.artist
       trackArt: media.art
@@ -571,35 +574,31 @@ Rectangle {
       barHeights: media.bars
     }
 
-    Item {
-      id: centerSection
+    ColumnLayout {
+      id: clockView
       anchors.centerIn: parent
+      spacing: 4
 
-      ColumnLayout {
-        id: clockView
-        anchors.centerIn: parent
-        spacing: 4
+      Text {
+        text: Qt.formatDateTime(clock.date, "HH:mm")
+        color: Theme.text
+        Layout.alignment: Qt.AlignHCenter
+        font { family: "Inter"; pixelSize: 20; weight: 700 }
+      }
 
-        Text {
-          text: Qt.formatDateTime(clock.date, "HH:mm")
-          color: Theme.text
-          Layout.alignment: Qt.AlignHCenter
-          font { family: "Inter"; pixelSize: 20; weight: 700 }
-        }
-
-        Text {
-          text: Qt.formatDateTime(clock.date, "ddd, MMM d")
-          color: Theme.text
-          opacity: 0.5
-          Layout.alignment: Qt.AlignHCenter
-          font { family: "Inter"; pixelSize: 11; weight: 500 }
-        }
+      Text {
+        text: Qt.formatDateTime(clock.date, "ddd, MMM d")
+        color: Theme.text
+        opacity: 0.5
+        Layout.alignment: Qt.AlignHCenter
+        font { family: "Inter"; pixelSize: 11; weight: 500 }
       }
     }
 
     StatusCapsule {
       id: statusCapsule
       anchors.right: parent.right
+      anchors.rightMargin: 20
       anchors.verticalCenter: parent.verticalCenter
       onClicked: clockWidget.toggleControlCenter()
     }

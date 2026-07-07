@@ -12,19 +12,15 @@ Rectangle {
 
     Behavior on color { ColorAnimation { duration: 150 } }
 
-    property string wifiName: status.wifi
-    property int wifiSignal: status.wifiSignal
-    property int batteryPercent: status.battery
-    property bool isCharging: status.charging
-    property string powerState: status.powerState
-    property string networkState: status.networkState
-    property string connectionType: status.connType
+    property string wifiName: StatusService.wifi
+    property int wifiSignal: StatusService.wifiSignal
+    property int batteryPercent: StatusService.battery
+    property bool isCharging: StatusService.charging
+    property string powerState: StatusService.powerState
+    property string networkState: StatusService.networkState
+    property string connectionType: StatusService.connType
     property bool isHovered: capsuleMouseArea.containsMouse
     signal clicked()
-
-    StatusService {
-        id: status
-    }
 
     MouseArea {
         id: capsuleMouseArea
@@ -47,7 +43,7 @@ Rectangle {
                 : statusCapsule.wifiSignal > 25 ? "󰤢"
                 : "󰤟"
             color: statusCapsule.networkState === "Disconnected" ? Theme.subtext : Theme.primary
-            font { family: "JetBrainsMono Nerd Font"; pixelSize: 13 }
+            font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconSmall }
         }
 
         Text {
@@ -61,13 +57,13 @@ Rectangle {
                 return "󰁺";
             }
             color: statusCapsule.batteryPercent > 20 ? Theme.primary : Theme.error
-            font { family: "JetBrainsMono Nerd Font"; pixelSize: 13 }
+            font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconSmall }
         }
 
         Text {
             text: statusCapsule.powerState === "Full" || statusCapsule.isCharging ? "AC" : statusCapsule.batteryPercent + "%"
             color: Theme.text
-            font { family: "Inter"; pixelSize: 11; weight: 700 }
+            font { family: "Inter"; pixelSize: Fonts.small; weight: 700 }
         }
     }
 }

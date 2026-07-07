@@ -17,7 +17,8 @@ QtObject {
   }
 
   function rescan() {
-    scanProc.exec();
+    scanProc.running = false;
+    scanProc.running = true;
   }
 
   property Timer rescanTimer: Timer {

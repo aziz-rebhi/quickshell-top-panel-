@@ -15,7 +15,7 @@ Item {
     id: track
     anchors.fill: parent
     radius: 20
-    color: Theme.surface
+    color: drag.containsMouse ? Theme.surfaceHover : Theme.surface
 
     Rectangle {
       width: Math.max(40, parent.width * slider.value)
@@ -40,6 +40,7 @@ Item {
     MouseArea {
       id: drag
       anchors.fill: parent
+      hoverEnabled: true
       onPressed: mouse => slider.moved(mouse.x / width)
       onPositionChanged: mouse => { if (pressed) slider.moved(mouse.x / width) }
     }

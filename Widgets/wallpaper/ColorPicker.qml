@@ -69,7 +69,7 @@ Rectangle {
         Layout.topMargin: 8
 
         Repeater {
-          model: root.loading ? 1 : root.colors.length
+          model: root.colors.length
 
           delegate: Item {
             readonly property string hexColor: root.loading ? "" : root.colors[index]

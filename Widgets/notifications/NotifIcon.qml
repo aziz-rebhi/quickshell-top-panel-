@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell.Io
 import "../../core"
 
 Item {
@@ -46,30 +45,9 @@ Item {
         ? "file://" + name : (name || "");
       return;
     }
-    var cmd = [
-      "sh", "-c",
-      "i=$1;" +
-      "for d in /usr/share/icons/hicolor/*/apps /usr/share/pixmaps; do " +
-      "  for f in \"$d/${i}.png\" \"$d/${i}.svg\" \"$d/${i}.xpm\"; do " +
-      "    [ -f \"$f\" ] && echo \"$f\" && exit 0; " +
-      "  done; " +
-      "done; " +
-      "echo ''",
-      "sh", name
-    ];
-    resolver.command = cmd;
-    resolver.running = true;
-  }
-
-  Process {
-    id: resolver
-    running: false
-    stdout: StdioCollector {
-      onStreamFinished: {
-        var path = this.text.trim();
-        root._resolvedSource = path ? "file://" + path : "";
-      }
-    }
+    IconResolver.resolveIcon(name, function(path) {
+      root._resolvedSource = path || "";
+    });
   }
 
   onAppIconChanged: startResolve(appIcon)

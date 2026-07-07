@@ -5,6 +5,7 @@ import "../../core"
 RowLayout {
     id: mediaSection
     spacing: 8
+    visible: mediaState !== "Idle"
 
     property string trackTitle: "No Media"
     property string trackArtist: "Unknown Artist"
@@ -63,9 +64,9 @@ RowLayout {
 
             Text {
                 text: mediaSection.trackTitle
-                color: mediaSection.mediaState === "Idle" ? Theme.subtext : Theme.text
-                opacity: mediaSection.mediaState === "Idle" ? 0.6 : 1.0
-                elide: Text.ElideRight
+                color: mediaSection.mediaState === "Idle" || mediaSection.mediaState === "Paused" ? Theme.subtext : Theme.text
+                opacity: mediaSection.mediaState === "Idle" || mediaSection.mediaState === "Paused" ? 0.6 : 1.0
+                wrapMode: Text.WordWrap
                 Layout.maximumWidth: 120
                 font { family: "Inter"; pixelSize: 12; weight: 500 }
             }

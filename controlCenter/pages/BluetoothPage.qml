@@ -36,7 +36,7 @@ ScrollView {
       RowLayout {
         anchors.fill: parent
         anchors.margins: 14
-        Text { text: "Bluetooth"; color: Theme.text; font { family: "Inter"; pixelSize: 14; weight: 700 } }
+        Text { text: "Bluetooth"; color: Theme.text; font { family: "Inter"; pixelSize: Fonts.title; weight: 700 } }
         Item { Layout.fillWidth: true }
         Rectangle {
           width: 46; height: 26; radius: 13
@@ -60,14 +60,14 @@ ScrollView {
       Text {
         text: "Devices"
         color: Theme.text; opacity: 0.7
-        font { family: "Inter"; pixelSize: 12; weight: 700 }
+        font { family: "Inter"; pixelSize: Fonts.body; weight: 700 }
         Layout.fillWidth: true
       }
 
       Text {
         text: btScanning ? "Scanning…" : "Scan"
         color: Theme.primary
-        font { family: "Inter"; pixelSize: 11; weight: 600 }
+        font { family: "Inter"; pixelSize: Fonts.small; weight: 600 }
         MouseArea {
           anchors.fill: parent; anchors.margins: -6
           cursorShape: Qt.PointingHandCursor
@@ -95,18 +95,18 @@ ScrollView {
           Text {
             text: modelData.pairing ? "󰄉" : (modelData.state === BluetoothDeviceState.Connected ? "󰂱" : "󰂯")
             color: modelData.state === BluetoothDeviceState.Connected ? Theme.primary : Theme.text
-            font { family: "JetBrainsMono Nerd Font"; pixelSize: 16 }
+            font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.heading }
           }
 
           ColumnLayout {
             spacing: 0
             Layout.fillWidth: true
-            Text { text: btCard.modelData.name || btCard.modelData.deviceName || "Unknown device"; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: "Inter"; pixelSize: 13; weight: 600 } }
+            Text { text: btCard.modelData.name || btCard.modelData.deviceName || "Unknown device"; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: "Inter"; pixelSize: Fonts.subtitle; weight: 600 } }
             Text {
               text: btDeviceSubtitle(btCard.modelData)
               color: modelData.state === BluetoothDeviceState.Connected ? Theme.primary : Theme.text
               opacity: modelData.state === BluetoothDeviceState.Connected ? 1 : 0.6
-              font { family: "Inter"; pixelSize: 10 }
+              font { family: "Inter"; pixelSize: Fonts.caption }
             }
           }
 
@@ -114,7 +114,7 @@ ScrollView {
             text: modelData.pairing ? "" : (modelData.paired ? "Forget" : "Pair")
             visible: !modelData.pairing
             color: Theme.error
-            font { family: "Inter"; pixelSize: 11; weight: 600 }
+            font { family: "Inter"; pixelSize: Fonts.small; weight: 600 }
             MouseArea {
               anchors.fill: parent; anchors.margins: -8
               cursorShape: Qt.PointingHandCursor
@@ -126,7 +126,7 @@ ScrollView {
             text: modelData.state === BluetoothDeviceState.Connected ? "Disconnect" : "Connect"
             visible: modelData.paired && !modelData.pairing
             color: Theme.primary
-            font { family: "Inter"; pixelSize: 11; weight: 600 }
+            font { family: "Inter"; pixelSize: Fonts.small; weight: 600 }
             MouseArea {
               anchors.fill: parent; anchors.margins: -8
               cursorShape: Qt.PointingHandCursor
@@ -143,7 +143,7 @@ ScrollView {
       color: Theme.text; opacity: 0.4
       Layout.alignment: Qt.AlignHCenter
       Layout.topMargin: 12
-      font { family: "Inter"; pixelSize: 12 }
+      font { family: "Inter"; pixelSize: Fonts.body }
     }
 
     Text {
@@ -152,7 +152,7 @@ ScrollView {
       color: Theme.primary; opacity: 0.6
       Layout.alignment: Qt.AlignHCenter
       Layout.topMargin: 12
-      font { family: "Inter"; pixelSize: 12 }
+      font { family: "Inter"; pixelSize: Fonts.body }
     }
 
     Item { Layout.preferredHeight: 4 }

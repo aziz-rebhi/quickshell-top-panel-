@@ -12,6 +12,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../Widgets/notifications"
+import "../Widgets/media"
 import "../core"
 
 PanelWindow {
@@ -464,6 +465,7 @@ PanelWindow {
     }
 
     function _saveNightLight() {
+        if (nlSaveProc.running) return;
         var s = JSON.stringify({
             enabled: nlEnabled,
             mode: nlMode,
@@ -560,97 +562,27 @@ PanelWindow {
         return "󰃠";
     }
 
-    // --- Media player (playerctl) ---
-    property QtObject activePlayer: playerctlData
-
-    property string playerArt: ""
-
-    property var playerctlData: QtObject {
-        property string identity: "Media Player"
-        property string trackTitle: ""
-        property string trackArtist: ""
-        property string artUrl: ""
-        property bool isPlaying: false
-        property real position: 0
-        property real length: 1
-
-        function previous() {
-            playerctlCmd.command = ["playerctl", "--player=playerctld", "previous"]
-            playerctlCmd.running = true
-        }
-        function togglePlaying() {
-            playerctlCmd.command = ["playerctl", "--player=playerctld", "play-pause"]
-            playerctlCmd.running = true
-        }
-        function next() {
-            playerctlCmd.command = ["playerctl", "--player=playerctld", "next"]
-            playerctlCmd.running = true
-        }
-
-        function fetch() {
-            metaProc.running = false
-            metaProc.command = [
-                "playerctl", "--player=playerctld", "metadata",
-                "--format",
-                "{{title}}|~|{{artist}}|~|{{mpris:artUrl}}|~|{{xesam:url}}|~|{{mpris:length}}|~|{{mpris:position}}"
-            ]
-            metaProc.running = true
-        }
+    // --- Media player (via MediaService singleton) ---
+    property QtObject activePlayer: QtObject {
+        readonly property string identity: MediaService.identity
+        readonly property string trackTitle: MediaService.title
+        readonly property string trackArtist: MediaService.artist
+        readonly property bool isPlaying: MediaService.playing
+        readonly property string artUrl: MediaService.art
+        readonly property real position: MediaService.position
+        readonly property real length: MediaService.length
+        function previous() { MediaService.previous() }
+        function togglePlaying() { MediaService.togglePlaying() }
+        function next() { MediaService.next() }
     }
 
-    property Process playerctlCmd: Process { command: ["true"]; running: false }
-
-    property Process playerctlStatusProc: Process {
-        command: ["playerctl", "--player=playerctld", "status", "--follow"]
-        running: true
-        stdout: SplitParser {
-            onRead: (data) => {
-                playerctlData.isPlaying = data.trim() === "Playing"
-                playerctlData.fetch()
-            }
-        }
-    }
-
-    property Process metaProc: Process {
-        command: ["true"]
-        running: false
-        stdout: SplitParser {
-            onRead: (data) => {
-                var parts = data.trim().split("|~|")
-                if (parts.length < 6) return
-                playerctlData.trackTitle = parts[0] || ""
-                playerctlData.trackArtist = parts[1] || ""
-                var artUrl = parts[2] || ""
-                var pageUrl = parts[3] || ""
-                var len = parseFloat(parts[4]) || 0
-                var pos = parseFloat(parts[5]) || 0
-                playerctlData.length = len > 0 ? len / 1000000 : 1
-                playerctlData.position = pos > 0 ? pos / 1000000 : 0
-                var newArt = ""
-                if (artUrl.startsWith("/"))
-                    newArt = "file://" + artUrl
-                else if (artUrl)
-                    newArt = artUrl
-                else if (pageUrl) {
-                    var m = pageUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
-                    if (m) newArt = "https://img.youtube.com/vi/" + m[1] + "/hqdefault.jpg"
-                }
-                playerctlData.artUrl = newArt
-                if (newArt) playerArt = newArt
-            }
-        }
-    }
+    property string playerArt: MediaService.art
 
     Component.onCompleted: {
         refreshWifi();
         _syncAudioNodes();
         backlightDetectProc.running = true;
         nlStateFile.reload();
-    }
-
-    property Timer pctlMetaTimer: Timer {
-        interval: 3000; running: true; repeat: true
-        onTriggered: playerctlData.fetch()
     }
 
     // ---- Inline components ----
@@ -687,7 +619,7 @@ PanelWindow {
         border.width: 2
         clip: true
 
-        Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.InOutQuad } }
+        Behavior on height { enabled: controlCenter.page === "main"; NumberAnimation { duration: 180; easing.type: Easing.InOutQuad } }
 
         ColumnLayout {
             anchors.fill: parent
@@ -702,7 +634,7 @@ PanelWindow {
                 Text {
                     text: "󰅁"
                     color: Theme.text
-                    font { family: "JetBrainsMono Nerd Font"; pixelSize: 18 }
+                    font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.heading }
 
                     MouseArea {
                         anchors.fill: parent
@@ -723,7 +655,7 @@ PanelWindow {
                     : controlCenter.page === "mode" ? "Performance Mode"
                     : "Control Center"
                     color: Theme.text
-                    font { family: "Inter"; pixelSize: 15; weight: 700 }
+                    font { family: "Inter"; pixelSize: Fonts.title; weight: 700 }
                     Layout.fillWidth: true
                 }
             }

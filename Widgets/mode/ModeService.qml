@@ -18,11 +18,13 @@ QtObject {
   readonly property real cpuTemp: _tempBuf >= 0 ? _tempBuf : 0
   property real _tempBuf: -1
   property bool _applying: false
+  property bool _saving: false
 
   readonly property string statePath: Quickshell.shellPath("scripts/mode-state.json")
 
   property FileView _stateReader: FileView {
     path: statePath
+    preload: true
   }
 
   // Always poll temperature; watchdog logic is inside onStreamFinished
@@ -121,6 +123,8 @@ QtObject {
   }
 
   function _saveState() {
+    if (_saving) return;
+    _saving = true;
     var data = JSON.stringify({ mode: currentMode });
     var p = Qt.createQmlObject(
       'import QtQuick; import Quickshell.Io; Process { command: ["sh", "-c", ' +
@@ -128,7 +132,7 @@ QtObject {
         data.replace(/\"/g, '\\"') + "\" > \"" + statePath + ".tmp\" && mv -f \"" +
         statePath + ".tmp\" \"" + statePath + "\"") +
       '] }', _root);
-    p.exited.connect(function() { p.destroy(); });
+    p.exited.connect(function() { _saving = false; p.destroy(); });
     p.running = true;
   }
 

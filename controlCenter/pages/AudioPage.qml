@@ -37,7 +37,7 @@ ScrollView {
     Text {
       text: "Output"
       color: Theme.muted
-      font { family: "Inter"; pixelSize: 11; weight: 700 }
+      font { family: "Inter"; pixelSize: Fonts.small; weight: 700 }
       Layout.leftMargin: 4
     }
 
@@ -60,7 +60,7 @@ ScrollView {
           Text {
             text: modelData === audioSink ? "✓" : "  "
             color: Theme.primary
-            font { family: "Inter"; pixelSize: 13; weight: 700 }
+            font { family: "Inter"; pixelSize: Fonts.subtitle; weight: 700 }
           }
 
           ColumnLayout {
@@ -69,7 +69,7 @@ ScrollView {
             Text {
               text: modelData.description || modelData.name || ""
               color: Theme.text
-              font { family: "Inter"; pixelSize: 12; weight: modelData === audioSink ? 600 : 400 }
+              font { family: "Inter"; pixelSize: Fonts.body; weight: modelData === audioSink ? 600 : 400 }
               elide: Text.ElideRight
               Layout.fillWidth: true
             }
@@ -77,7 +77,7 @@ ScrollView {
               text: modelData.nickname || ""
               visible: text !== ""
               color: Theme.subtext
-              font { family: "Inter"; pixelSize: 9 }
+              font { family: "Inter"; pixelSize: Fonts.caption }
               elide: Text.ElideRight
               Layout.fillWidth: true
             }
@@ -104,7 +104,7 @@ ScrollView {
     Text {
       text: "Input"
       color: Theme.muted
-      font { family: "Inter"; pixelSize: 11; weight: 700 }
+      font { family: "Inter"; pixelSize: Fonts.small; weight: 700 }
       Layout.leftMargin: 4
     }
 
@@ -127,7 +127,7 @@ ScrollView {
           Text {
             text: modelData === audioSource ? "✓" : "  "
             color: Theme.primary
-            font { family: "Inter"; pixelSize: 13; weight: 700 }
+            font { family: "Inter"; pixelSize: Fonts.subtitle; weight: 700 }
           }
 
           ColumnLayout {
@@ -136,7 +136,7 @@ ScrollView {
             Text {
               text: modelData.description || modelData.name || ""
               color: Theme.text
-              font { family: "Inter"; pixelSize: 12; weight: modelData === audioSource ? 600 : 400 }
+              font { family: "Inter"; pixelSize: Fonts.body; weight: modelData === audioSource ? 600 : 400 }
               elide: Text.ElideRight
               Layout.fillWidth: true
             }
@@ -144,7 +144,7 @@ ScrollView {
               text: modelData.nickname || ""
               visible: text !== ""
               color: Theme.subtext
-              font { family: "Inter"; pixelSize: 9 }
+              font { family: "Inter"; pixelSize: Fonts.caption }
               elide: Text.ElideRight
               Layout.fillWidth: true
             }

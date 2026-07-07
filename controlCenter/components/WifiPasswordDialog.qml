@@ -40,7 +40,7 @@ Item {
       Text {
         text: "Connect to " + root.pendingSsid
         color: Theme.text
-        font { family: "Inter"; pixelSize: 14; weight: 700 }
+        font { family: Fonts.main; pixelSize: Fonts.title; weight: 700 }
         Layout.fillWidth: true
         elide: Text.ElideRight
       }
@@ -60,7 +60,7 @@ Item {
           placeholderText: "Password"
           placeholderTextColor: Theme.subtext
           background: null
-          font { family: "Inter"; pixelSize: 13 }
+          font { family: Fonts.main; pixelSize: Fonts.subtitle }
         }
       }
 
@@ -69,7 +69,7 @@ Item {
         CheckBox {
           id: revealBtn
           text: "Show password"
-          contentItem: Text { text: revealBtn.text; color: Theme.text; opacity: 0.7; leftPadding: revealBtn.indicator.width + 6; font { family: "Inter"; pixelSize: 11 } }
+          contentItem: Text { text: revealBtn.text; color: Theme.text; opacity: 0.7; leftPadding: revealBtn.indicator.width + 6; font { family: Fonts.main; pixelSize: Fonts.small } }
         }
       }
 
@@ -79,7 +79,7 @@ Item {
         color: Theme.error
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
-        font { family: "Inter"; pixelSize: 11 }
+        font { family: Fonts.main; pixelSize: Fonts.small }
       }
 
       RowLayout {
@@ -92,7 +92,7 @@ Item {
           height: 36
           radius: 10
           color: Theme.surface
-          Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.text; font { family: "Inter"; pixelSize: 12; weight: 600 } }
+          Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.text; font { family: Fonts.main; pixelSize: Fonts.body; weight: 600 } }
           MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.dismiss(); pwField.text = ""; } }
         }
         Rectangle {
@@ -100,7 +100,7 @@ Item {
           height: 36
           radius: 10
           color: Theme.primary
-          Text { anchors.centerIn: parent; text: root.connecting ? "Connecting…" : "Connect"; color: Theme.primaryFg; font { family: "Inter"; pixelSize: 12; weight: 700 } }
+          Text { anchors.centerIn: parent; text: root.connecting ? "Connecting…" : "Connect"; color: Theme.primaryFg; font { family: Fonts.main; pixelSize: Fonts.body; weight: 700 } }
           MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor

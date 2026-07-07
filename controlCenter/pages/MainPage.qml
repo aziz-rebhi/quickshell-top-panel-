@@ -182,7 +182,7 @@ ColumnLayout {
               anchors.centerIn: parent
               text: "󰎆"
               color: Theme.primary
-              font { family: "JetBrainsMono Nerd Font"; pixelSize: 24 }
+              font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconXLarge }
             }
           }
         }
@@ -201,13 +201,13 @@ ColumnLayout {
           opacity: 0.6
           elide: Text.ElideRight
           Layout.fillWidth: true
-          font { family: "Inter"; pixelSize: 10 }
+          font { family: "Inter"; pixelSize: Fonts.caption }
         }
 
         Text {
           text: activePlayer?.trackTitle || "Nothing playing"
           color: Theme.text
-          font { family: "Inter"; pixelSize: 15; weight: 700 }
+          font { family: "Inter"; pixelSize: Fonts.title; weight: 700 }
           elide: Text.ElideRight
           Layout.fillWidth: true
         }
@@ -218,7 +218,7 @@ ColumnLayout {
           opacity: 0.7
           elide: Text.ElideRight
           Layout.fillWidth: true
-          font { family: "Inter"; pixelSize: 12 }
+          font { family: "Inter"; pixelSize: Fonts.body }
         }
 
         RowLayout {
@@ -229,7 +229,7 @@ ColumnLayout {
           Text {
             text: "󰒮"
             color: Theme.subtext
-            font { family: "JetBrainsMono Nerd Font"; pixelSize: 12 }
+            font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconSmall }
             MouseArea {
               anchors.fill: parent
               anchors.margins: -6
@@ -249,7 +249,7 @@ ColumnLayout {
               anchors.centerIn: parent
               text: activePlayer?.isPlaying ? "" : ""
               color: Theme.surface
-              font { family: "JetBrainsMono Nerd Font"; pixelSize: 12 }
+              font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconSmall }
             }
 
             MouseArea {
@@ -265,7 +265,7 @@ ColumnLayout {
           Text {
             text: "󰒭"
             color: Theme.subtext
-            font { family: "JetBrainsMono Nerd Font"; pixelSize: 12 }
+            font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconSmall }
             MouseArea {
               anchors.fill: parent
               anchors.margins: -6
@@ -299,7 +299,7 @@ ColumnLayout {
   NotificationHistory {
     id: notifHist
     Layout.fillWidth: true
-    visible: true
+    visible: (storedNotifications?.length ?? 0) > 0
     onDismissNotif: (notifRef) => dismissNotif(notifRef)
     onClearAll: clearNotifs()
   }
@@ -312,7 +312,7 @@ ColumnLayout {
     color: Theme.text
     opacity: 0.3
     horizontalAlignment: Text.AlignHCenter
-    font { family: "Inter"; pixelSize: 12 }
+    font { family: "Inter"; pixelSize: Fonts.body }
   }
 
   Item { Layout.fillHeight: true }

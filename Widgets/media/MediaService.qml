@@ -3,10 +3,12 @@ import Quickshell.Io
 import QtQuick
 
 QtObject {
+  property string playerStatus: "Stopped"
   property bool playing: false
 
   readonly property string mediaState: {
-    if (!playing) return "Idle";
+    if (playerStatus === "Stopped") return "Idle";
+    if (playerStatus === "Paused") return "Paused";
     if (title === "No Media") return "Loading";
     return "Playing";
   }
@@ -16,6 +18,9 @@ QtObject {
   property string art: ""
 
   property var bars: [2, 2, 2, 2]
+  property real position: 0
+  property real length: 1
+  property string identity: "Media Player"
 
   property Process playerStatusProc: Process {
     command: [
@@ -28,7 +33,8 @@ QtObject {
 
     stdout: SplitParser {
       onRead: (data) => {
-        playing = data.trim() === "Playing"
+        playerStatus = data.trim();
+        playing = playerStatus === "Playing";
         metaTimer.restart();
       }
     }
@@ -46,10 +52,32 @@ QtObject {
     onTriggered: fetchMetadata()
   }
 
+  onPlayingChanged: {
+    if (playing) {
+      cavaProc.running = true;
+    } else {
+      cavaProc.running = false;
+      bars = [2, 2, 2, 2];
+    }
+  }
+
   function youtubeThumb(url) {
     if (!url) return "";
     var match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     return match ? "https://img.youtube.com/vi/" + match[1] + "/hqdefault.jpg" : "";
+  }
+
+  function previous() {
+    transportProc.command = ["playerctl", "--player=playerctld", "previous"];
+    transportProc.running = true;
+  }
+  function togglePlaying() {
+    transportProc.command = ["playerctl", "--player=playerctld", "play-pause"];
+    transportProc.running = true;
+  }
+  function next() {
+    transportProc.command = ["playerctl", "--player=playerctld", "next"];
+    transportProc.running = true;
   }
 
   function fetchMetadata() {
@@ -59,7 +87,7 @@ QtObject {
       "-p", "playerctld",
       "metadata",
       "--format",
-      "{{title}}|~|{{artist}}|~|{{mpris:artUrl}}|~|{{xesam:url}}"
+      "{{title}}|~|{{artist}}|~|{{mpris:artUrl}}|~|{{xesam:url}}|~|{{mpris:length}}|~|{{mpris:position}}"
     ];
     playerMetadataProc.running = true;
   }
@@ -70,13 +98,17 @@ QtObject {
     stdout: SplitParser {
       onRead: (data) => {
         var parts = data.trim().split("|~|");
-        if (parts.length < 4) return;
+        if (parts.length < 6) return;
 
         title = parts[0] || "No Media";
         artist = parts[1] || "Unknown";
 
         var artUrl = parts[2];
         var pageUrl = parts[3];
+        var len = parseFloat(parts[4]) || 0;
+        var pos = parseFloat(parts[5]) || 0;
+        length = len > 0 ? len / 1000000 : 1;
+        position = pos > 0 ? pos / 1000000 : 0;
 
         var newArt = "";
         if (artUrl && artUrl.startsWith("/"))
@@ -92,13 +124,18 @@ QtObject {
     }
   }
 
+  property Process transportProc: Process {
+    command: ["true"]
+    running: false
+  }
+
   property Process cavaProc: Process {
     command: [
       "stdbuf", "-oL",
       "cava",
       "-p", Quickshell.shellPath("Widgets/cava/cava.conf")
     ]
-    running: playing
+    running: false
 
     stdout: SplitParser {
       onRead: (data) => {
