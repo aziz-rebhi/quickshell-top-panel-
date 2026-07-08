@@ -1,7 +1,7 @@
 import Quickshell
 import Quickshell.Io
 import QtQuick
-import "../core"
+import "../../core"
 
 QtObject {
   id: appService
