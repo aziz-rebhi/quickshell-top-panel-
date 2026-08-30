@@ -137,12 +137,16 @@ QtObject {
   }
 
   function _restoreState() {
+    // Skip while a mode transition is in flight (prevents re-entry from FileView text change)
+    if (_applying || _saving) return;
     var raw = _stateReader.text().trim();
     if (!raw) return;
     try {
       var s = JSON.parse(raw);
-      if (s.mode === "silent" || s.mode === "performance") {
+      if ((s.mode === "silent" || s.mode === "performance") && s.mode !== currentMode) {
         setMode(s.mode);
+      } else if (s.mode === "balanced") {
+        currentMode = "balanced";
       }
     } catch(e) {
       console.warn("ModeService: invalid state file, defaulting to balanced");

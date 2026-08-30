@@ -22,6 +22,12 @@ PanelWindow {
 
     property string page: "main"
     onIsOpenChanged: if (isOpen) page = "main"
+    onPageChanged: {
+        if (page === "wifi") {
+            refreshWifi();
+            loadCurrentWifiPassword();
+        }
+    }
 
     WlrLayershell.layer: WlrLayer.Overlay
 
@@ -531,6 +537,16 @@ PanelWindow {
         path: controlCenter.backlightDevice
             ? `/sys/class/backlight/${controlCenter.backlightDevice}/max_brightness`
             : ""
+        onLoaded: controlCenter.syncBrightnessFromSysfs()
+        onTextChanged: controlCenter.syncBrightnessFromSysfs()
+    }
+
+    // When backlight device is detected, force both FileViews to reload
+    onBacklightDeviceChanged: {
+        if (backlightDevice) {
+            brightnessCurrentFile.reload();
+            brightnessMaxFile.reload();
+        }
     }
 
     function syncBrightnessFromSysfs() {
@@ -694,6 +710,7 @@ PanelWindow {
                 wifiScanning: controlCenter.wifiScanning
                 wifiConnecting: controlCenter.wifiConnecting
                 wifiQrPath: controlCenter.wifiQrPath
+                wifiCurrentPassword: controlCenter.wifiCurrentPassword
                 onToggleWifi: controlCenter.toggleWifi()
                 onScanWifi: controlCenter.scanWifi()
                 onConnectToWifi: (ssid, security, pw) => controlCenter.connectToWifi(ssid, security, pw)
@@ -702,7 +719,6 @@ PanelWindow {
                 onGenerateWifiQr: controlCenter.generateWifiQr()
                 onRequestPassword: (ssid) => { controlCenter.wifiPendingSsid = ssid; controlCenter.wifiNeedsPassword = true; }
                 onBackRequested: controlCenter.page = "main"
-                onShowQrCode: (path) => controlCenter.showQrCode(path)
             }
 
             // ---- BLUETOOTH PAGE ----

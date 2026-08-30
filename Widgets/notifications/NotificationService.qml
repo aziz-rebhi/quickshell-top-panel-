@@ -47,7 +47,16 @@ Item {
 
       var arr = notifService.storedNotifications.slice();
       arr.push(data);
-      if (arr.length > 50) arr.splice(0, arr.length - 50);
+      // Trim oldest entries and release their RetainableLocks to avoid leaks
+      while (arr.length > 50) {
+        var old = arr.shift();
+        if (old && old._lock) {
+          try {
+            old._lock.locked = false;
+            old._lock.destroy();
+          } catch (e) {}
+        }
+      }
       notifService.storedNotifications = arr;
     }
   }

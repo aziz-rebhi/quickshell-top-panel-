@@ -89,16 +89,24 @@ ShellRoot {
     stdout: SplitParser {
       onRead: (data) => {
         var flags = data.trim()
-        if (flags.indexOf("p") >= 0 && !clockItem.showAppLauncher) {
+        // Mutual exclusion: power menu and app launcher cannot both be open.
+        // If both flags arrive in the same poll, power menu wins.
+        if (flags.indexOf("p") >= 0) {
           if (clockItem.showColorPicker) wallpaperSvc.cancelPick();
-          clockItem.showPowerMenu = true
-        }
-        if (flags.indexOf("a") >= 0 && !clockItem.showPowerMenu) {
+          clockItem.showAppLauncher = false;
+          clockItem.showWallpaperMenu = false;
+          clockItem.showPowerMenu = true;
+        } else if (flags.indexOf("a") >= 0) {
           if (clockItem.showColorPicker) wallpaperSvc.cancelPick();
-          clockItem.showAppLauncher = true
+          clockItem.showPowerMenu = false;
+          clockItem.showWallpaperMenu = false;
+          clockItem.showAppLauncher = true;
         }
-        if (flags.indexOf("w") >= 0)
-          clockItem.showWallpaperMenu = !clockItem.showWallpaperMenu
+        if (flags.indexOf("w") >= 0) {
+          clockItem.showPowerMenu = false;
+          clockItem.showAppLauncher = false;
+          clockItem.showWallpaperMenu = !clockItem.showWallpaperMenu;
+        }
         if (flags.indexOf("m") >= 0) {
           modeSvc.cycleMode();
           clockItem.showModeIndicator();
@@ -152,21 +160,11 @@ ShellRoot {
       if (t.length < 10) return
       try {
         var c = JSON.parse(t)
-        if (c.background) Theme.background = c.background
-        if (c.surface) Theme.surface = c.surface
-        if (c.surfaceBright) Theme.surfaceBright = c.surfaceBright
-        if (c.surfaceDim) Theme.surfaceDim = c.surfaceDim
-        if (c.surfaceContainer) Theme.surfaceContainer = c.surfaceContainer
-        if (c.surfaceVariant) Theme.surfaceVariant = c.surfaceVariant
+        // Neutral chrome surfaces stay fixed dark; only accents follow matugen.
         if (c.primary) Theme.primary = c.primary
         if (c.primaryFg) Theme.primaryFg = c.primaryFg
         if (c.secondary) Theme.secondary = c.secondary
         if (c.tertiary) Theme.tertiary = c.tertiary
-        if (c.backgroundFg) Theme.backgroundFg = c.backgroundFg
-        if (c.surfaceFg) Theme.surfaceFg = c.surfaceFg
-        if (c.surfaceVariantFg) Theme.surfaceVariantFg = c.surfaceVariantFg
-        if (c.outline) Theme.outline = c.outline
-        if (c.outlineVariant) Theme.outlineVariant = c.outlineVariant
         if (c.error) Theme.error = c.error
       } catch (e) {
         console.error("theme colors parse error:", e)

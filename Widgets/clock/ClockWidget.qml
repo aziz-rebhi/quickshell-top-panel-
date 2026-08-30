@@ -303,7 +303,7 @@ Rectangle {
   }
 
   // --- Layout ---
-  MediaService { id: media }
+  // MediaService is a pragma Singleton (shared with ControlCenter)
   WeatherService { id: weatherSvc }
 
   // --- Askpass dialog state ---
@@ -351,7 +351,8 @@ Rectangle {
   RowLayout {
     id: collapsedRow
     anchors.centerIn: parent
-    spacing: media.playing ? 8 : 0
+    spacing: MediaService.playing ? 8 : 0
+
 
     opacity: clockWidget.isExpanded || clockWidget.mode !== "default" ? 0.0 : 1.0
     visible: opacity > 0.0
@@ -360,7 +361,8 @@ Rectangle {
     Item {
       id: visualizerContainer
       Layout.alignment: Qt.AlignVCenter
-      property real targetWidth: media.playing ? 14 : 0
+      property real targetWidth: MediaService.playing ? 14 : 0
+
       Layout.preferredWidth: targetWidth
       Layout.preferredHeight: 12
       clip: true
@@ -373,10 +375,10 @@ Rectangle {
         spacing: 2
         height: 12
 
-        Rectangle { width: 2; height: Math.min(12, media.bars[0]); radius: 1; color: Theme.primary; anchors.bottom: parent.bottom }
-        Rectangle { width: 2; height: Math.min(12, media.bars[1]); radius: 1; color: Theme.primary; anchors.bottom: parent.bottom }
-        Rectangle { width: 2; height: Math.min(12, media.bars[2]); radius: 1; color: Theme.primary; anchors.bottom: parent.bottom }
-        Rectangle { width: 2; height: Math.min(12, media.bars[3]); radius: 1; color: Theme.primary; anchors.bottom: parent.bottom }
+        Rectangle { width: 2; height: Math.min(12, MediaService.bars[0]); radius: 1; color: Theme.primary; anchors.bottom: parent.bottom }
+        Rectangle { width: 2; height: Math.min(12, MediaService.bars[1]); radius: 1; color: Theme.primary; anchors.bottom: parent.bottom }
+        Rectangle { width: 2; height: Math.min(12, MediaService.bars[2]); radius: 1; color: Theme.primary; anchors.bottom: parent.bottom }
+        Rectangle { width: 2; height: Math.min(12, MediaService.bars[3]); radius: 1; color: Theme.primary; anchors.bottom: parent.bottom }
       }
     }
 
@@ -561,11 +563,11 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       width: Math.min(implicitWidth, (parent.width - clockView.implicitWidth) / 2 - 8)
       clip: true
-      trackTitle: media.title
-      trackArtist: media.artist
-      trackArt: media.art
-      mediaState: media.mediaState
-      barHeights: media.bars
+      trackTitle: MediaService.title
+      trackArtist: MediaService.artist
+      trackArt: MediaService.art
+      mediaState: MediaService.mediaState
+      barHeights: MediaService.bars
     }
 
     ColumnLayout {

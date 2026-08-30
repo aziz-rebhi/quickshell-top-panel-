@@ -126,11 +126,10 @@ QtObject {
     svc.candidateColors = []
     svc.pickingColor = false
     svc.colorApplied(hex)
+    // Match wallpaper.sh: always use the user matugen config
     _applyColorProc.command = [
-      "matugen", "color", "hex", hex,
-      "-m", "dark",
-      "--type", "scheme-fidelity",
-      "-c", Quickshell.shellPath("../matugen/config.toml")
+      "sh", "-c",
+      "matugen color hex '" + hex + "' -m dark --type scheme-fidelity -c \"$HOME/.config/matugen/config.toml\""
     ]
     _applyColorProc.running = true
   }

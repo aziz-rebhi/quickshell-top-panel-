@@ -45,7 +45,10 @@ QtObject {
     _writing = true;
     var req = _queue[0];
     console.log("askpass: cancel, fifo=" + req.fifoPath);
-    writeFifo(req.fifoPath, "\n");
+    // Both helpers understand the CANCELLED sentinel:
+    // - quickshell-ssh-askpass exits 1 (correct for SSH)
+    // - quickshell-askpass converts it to an empty password (correct for sudo)
+    writeFifo(req.fifoPath, "CANCELLED");
   }
 
   function writeFifo(fifoPath: string, content: string): void {
