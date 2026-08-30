@@ -4,7 +4,6 @@ import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
 import Quickshell.Services.Notifications
-import "./components"
 import "./pages"
 
 import Quickshell.Bluetooth
@@ -21,11 +20,17 @@ PanelWindow {
     visible: isOpen
 
     property string page: "main"
-    onIsOpenChanged: if (isOpen) page = "main"
+    onIsOpenChanged: {
+        if (isOpen) page = "main";
+        else { wifiPendingSsid = ""; wifiConnectError = ""; }
+    }
     onPageChanged: {
         if (page === "wifi") {
             refreshWifi();
             loadCurrentWifiPassword();
+        } else {
+            wifiPendingSsid = "";
+            wifiConnectError = "";
         }
     }
 
@@ -39,6 +44,10 @@ PanelWindow {
     property var storedNotifications: []
 
     exclusionMode: ExclusionMode.Ignore
+
+    // Grab keyboard exclusively while a wifi password field is open, so the
+    // TextField receives keystrokes (layer-shell surfaces get none by default).
+    WlrLayershell.keyboardFocus: wifiPendingSsid ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     anchors {
         top: true
@@ -233,10 +242,18 @@ PanelWindow {
 
     Process {
         id: wifiScanProc
-        command: ["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan yes 2>/dev/null"]
+        command: ["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan yes 2>/dev/null; echo '---SAVED---'; nmcli -t -f NAME,TYPE connection show | while read -r line; do name=${line%:*}; type=${line##*:}; if [ \"$type\" = \"802-11-wireless\" ]; then nmcli -g 802-11-wireless.ssid connection show \"$name\" 2>/dev/null; fi; done"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const lines = this.text.split("\n").filter(l => l.trim().length > 0);
+                const savedMap = {};
+                const savedSeg = this.text.split("---SAVED---");
+                if (savedSeg.length > 1) {
+                    for (const l of savedSeg[1].split("\n")) {
+                        const s = l.trim();
+                        if (s) savedMap[s] = true;
+                    }
+                }
+                const lines = savedSeg[0].split("\n").filter(l => l.trim().length > 0);
                 const seen = {};
                 const list = [];
                 for (const line of lines) {
@@ -248,16 +265,17 @@ PanelWindow {
                     const security = fields[3];
                     if (!ssid || seen[ssid]) continue;
                     seen[ssid] = true;
-                    list.push({ ssid: ssid, signal: signal, security: security, active: inUse });
+                    list.push({ ssid: ssid, signal: signal, security: security, active: inUse, saved: !!savedMap[ssid] });
                 }
                 list.sort((a, b) => b.signal - a.signal);
-                controlCenter.wifiNetworks = list;
+                controlCenter.wifiNetworks = list.filter(n => !n.active);
                 controlCenter.wifiScanning = false;
             }
         }
     }
 
     function scanWifi() {
+        if (wifiPendingSsid) return;
         wifiScanning = true;
         wifiScanProc.running = true;
     }
@@ -271,7 +289,6 @@ PanelWindow {
     }
 
     property string wifiPendingSsid: ""
-    property bool wifiNeedsPassword: false
     property string wifiConnectError: ""
     property bool wifiConnecting: false
 
@@ -280,7 +297,7 @@ PanelWindow {
         wifiConnectError = "";
         const args = password
             ? ["nmcli", "dev", "wifi", "connect", ssid, "password", password]
-            : ["nmcli", "connection", "up", "id", ssid];
+            : ["nmcli", "dev", "wifi", "connect", ssid];
         wifiConnectProc.command = args;
         wifiConnectProc.running = true;
     }
@@ -711,13 +728,16 @@ PanelWindow {
                 wifiConnecting: controlCenter.wifiConnecting
                 wifiQrPath: controlCenter.wifiQrPath
                 wifiCurrentPassword: controlCenter.wifiCurrentPassword
+                wifiPendingSsid: controlCenter.wifiPendingSsid
+                wifiConnectError: controlCenter.wifiConnectError
                 onToggleWifi: controlCenter.toggleWifi()
                 onScanWifi: controlCenter.scanWifi()
                 onConnectToWifi: (ssid, security, pw) => controlCenter.connectToWifi(ssid, security, pw)
                 onLoadCurrentWifiPassword: controlCenter.loadCurrentWifiPassword()
                 onDisconnectWifi: controlCenter.disconnectWifi()
                 onGenerateWifiQr: controlCenter.generateWifiQr()
-                onRequestPassword: (ssid) => { controlCenter.wifiPendingSsid = ssid; controlCenter.wifiNeedsPassword = true; }
+                onRequestPassword: (ssid) => { controlCenter.wifiConnectError = ""; controlCenter.wifiPendingSsid = ssid; }
+                onCancelPassword: () => { controlCenter.wifiConnectError = ""; controlCenter.wifiPendingSsid = ""; }
                 onBackRequested: controlCenter.page = "main"
             }
 
@@ -794,15 +814,5 @@ PanelWindow {
               onBackRequested: controlCenter.page = "main"
             }
         }
-    }
-
-    WifiPasswordDialog {
-      anchors.fill: parent
-      visible: controlCenter.wifiNeedsPassword
-      pendingSsid: controlCenter.wifiPendingSsid
-      connectError: controlCenter.wifiConnectError
-      connecting: controlCenter.wifiConnecting
-      onDismiss: controlCenter.wifiNeedsPassword = false
-      onConnectRequested: (ssid, pw) => controlCenter.connectToWifi(ssid, "secured", pw)
     }
 }

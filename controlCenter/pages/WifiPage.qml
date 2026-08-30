@@ -19,6 +19,8 @@ ScrollView {
   property string wifiQrPath: ""
   property string wifiCurrentPassword: ""
   property bool wifiPasswordRevealed: false
+  property string wifiPendingSsid: ""
+  property string wifiConnectError: ""
 
   signal toggleWifi()
   signal scanWifi()
@@ -29,6 +31,7 @@ ScrollView {
   signal generateWifiQr()
   signal showQrCode(string path)
   signal requestPassword(string ssid)
+  signal cancelPassword()
 
   ColumnLayout {
     width: parent.width
@@ -166,38 +169,32 @@ ScrollView {
       delegate: Rectangle {
         required property var modelData
         Layout.fillWidth: true
-        Layout.preferredHeight: 52
+        Layout.preferredHeight: expanded ? entryCol.implicitHeight + 24 : 52
         radius: 14
         color: modelData.active ? Theme.surfaceLight : Theme.surface
 
-        RowLayout {
-          anchors.fill: parent
-          anchors.margins: 14
-          spacing: 10
+        property bool expanded: wifiPendingSsid === modelData.ssid
+        property bool connecting: wifiConnecting && wifiPendingSsid === modelData.ssid
+        property bool pwReveal: false
 
-          Text {
-            text: modelData.signal > 75 ? "󰤨" : modelData.signal > 50 ? "󰤥" : modelData.signal > 25 ? "󰤢" : "󰤟"
-            color: Theme.text
-            font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.title }
+        function startConnect() {
+          if (!expanded || connecting) return;
+          connectToWifi(modelData.ssid, modelData.security || "secured", pwField.text);
+        }
+
+        onExpandedChanged: {
+          if (expanded) {
+            pwField.forceActiveFocus();
+            focusTimer.restart();
           }
+        }
 
-          ColumnLayout {
-            spacing: 0
-            Layout.fillWidth: true
-            Text { text: modelData.ssid; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: "Inter"; pixelSize: Fonts.subtitle; weight: 600 } }
-            Text {
-              text: modelData.active ? "Connected" : (modelData.security && modelData.security !== "--" ? "Secured" : "Open")
-              color: modelData.active ? Theme.primary : Theme.text
-              opacity: modelData.active ? 1 : 0.6
-              font { family: "Inter"; pixelSize: Fonts.caption }
-            }
-          }
-
-          Text {
-            visible: modelData.security && modelData.security !== "--"
-            text: "󰲛"
-            color: Theme.text; opacity: 0.5
-            font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconSmall }
+        Timer {
+          id: focusTimer
+          interval: 100
+          repeat: false
+          onTriggered: {
+            if (expanded) pwField.forceActiveFocus();
           }
         }
 
@@ -206,10 +203,140 @@ ScrollView {
           cursorShape: Qt.PointingHandCursor
           onClicked: {
             if (modelData.active) return;
-            if (modelData.security && modelData.security !== "--") {
-              requestPassword(modelData.ssid);
+            if (modelData.security && modelData.security !== "--" && !modelData.saved) {
+              if (expanded) cancelPassword();
+              else requestPassword(modelData.ssid);
             } else {
               connectToWifi(modelData.ssid, modelData.security || "", "");
+            }
+          }
+        }
+
+        ColumnLayout {
+          id: entryCol
+          anchors.fill: parent
+          anchors.margins: 12
+          spacing: 10
+
+          RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            Text {
+              text: modelData.signal > 75 ? "󰤨" : modelData.signal > 50 ? "󰤥" : modelData.signal > 25 ? "󰤢" : "󰤟"
+              color: Theme.text
+              font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.title }
+            }
+
+            ColumnLayout {
+              spacing: 0
+              Layout.fillWidth: true
+              Text { text: modelData.ssid; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: "Inter"; pixelSize: Fonts.subtitle; weight: 600 } }
+              Text {
+                text: modelData.active ? "Connected"
+                    : (modelData.saved ? "Saved"
+                    : (expanded ? "Enter password"
+                    : (modelData.security && modelData.security !== "--" ? "Secured" : "Open")))
+                color: expanded || modelData.saved ? Theme.primary : (modelData.active ? Theme.primary : Theme.text)
+                opacity: modelData.active || modelData.saved ? 1 : 0.6
+                font { family: "Inter"; pixelSize: Fonts.caption }
+              }
+            }
+
+            Text {
+              visible: modelData.security && modelData.security !== "--"
+              text: "󰲛"
+              color: Theme.text; opacity: 0.5
+              font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconSmall }
+            }
+          }
+
+          ColumnLayout {
+            visible: expanded
+            Layout.fillWidth: true
+            spacing: 8
+
+            Rectangle {
+              Layout.fillWidth: true
+              height: 38
+              radius: 10
+              color: Theme.surfaceDim
+
+              TextField {
+                id: pwField
+                anchors.fill: parent
+                anchors.margins: 2
+                color: Theme.text
+                echoMode: pwReveal ? TextInput.Normal : TextInput.Password
+                placeholderText: "Password"
+                placeholderTextColor: Theme.subtext
+                background: null
+                font { family: "Inter"; pixelSize: Fonts.subtitle }
+                focus: expanded
+                Keys.onReturnPressed: startConnect()
+              }
+            }
+
+            RowLayout {
+              Layout.fillWidth: true
+              spacing: 10
+
+              Text {
+                text: "Show password"
+                color: Theme.text; opacity: 0.6
+                font { family: "Inter"; pixelSize: Fonts.small; weight: 600 }
+                MouseArea {
+                  anchors.fill: parent; anchors.margins: -6
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: pwReveal = !pwReveal
+                }
+              }
+              Item { Layout.fillWidth: true }
+            }
+
+            Text {
+              visible: wifiConnectError.length > 0
+              text: wifiConnectError
+              color: Theme.error
+              wrapMode: Text.WordWrap
+              Layout.fillWidth: true
+              font { family: "Inter"; pixelSize: Fonts.small }
+            }
+
+            RowLayout {
+              Layout.fillWidth: true
+              spacing: 10
+
+              Rectangle {
+                Layout.fillWidth: true
+                height: 32
+                radius: 9
+                color: Theme.surface
+                Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.text; font { family: "Inter"; pixelSize: Fonts.small; weight: 600 } }
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: cancelPassword()
+                }
+              }
+              Rectangle {
+                Layout.fillWidth: true
+                height: 32
+                radius: 9
+                color: connecting ? Theme.surface : Theme.primary
+                Text {
+                  anchors.centerIn: parent
+                  text: connecting ? "Connecting…" : "Connect"
+                  color: connecting ? Theme.text : Theme.primaryFg
+                  font { family: "Inter"; pixelSize: Fonts.small; weight: 700 }
+                }
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  enabled: !connecting
+                  onClicked: startConnect()
+                }
+              }
             }
           }
         }
