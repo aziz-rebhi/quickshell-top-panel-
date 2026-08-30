@@ -111,6 +111,59 @@ Rectangle {
     }
   }
 
+  // --- Battery state (low warning + plug/unplug) ---
+  property bool fullScreenActive: false
+  property int batteryPercent2: StatusService.battery
+  property bool batteryCharging2: StatusService.charging
+  property bool _batteryWarned30: false
+  property bool _batteryWarned15: false
+  property bool _prevCharging: false
+  property bool _prevChargingInit: false
+
+  Timer {
+    id: batteryModeTimer
+    interval: 6000
+    onTriggered: clockWidget.mode = "default"
+  }
+
+  Timer {
+    id: batteryInitTimer
+    interval: 1500
+    running: true
+    repeat: false
+    onTriggered: {
+      clockWidget._prevChargingInit = true;
+      clockWidget._prevCharging = StatusService.charging;
+    }
+  }
+
+  onBatteryPercent2Changed: {
+    if (!_ready || clockWidget.isExpanded || clockWidget.fullScreenActive) return;
+    if (clockWidget.batteryCharging2 || clockWidget.batteryPercent2 > 30) {
+      clockWidget._batteryWarned30 = false;
+      clockWidget._batteryWarned15 = false;
+      return;
+    }
+    if (clockWidget.batteryPercent2 <= 15 && !clockWidget._batteryWarned15) {
+      clockWidget._batteryWarned15 = true;
+      clockWidget.mode = "batteryCritical";
+      batteryModeTimer.restart();
+    } else if (clockWidget.batteryPercent2 <= 30 && !clockWidget._batteryWarned30) {
+      clockWidget._batteryWarned30 = true;
+      clockWidget.mode = "battery";
+      batteryModeTimer.restart();
+    }
+  }
+
+  onBatteryCharging2Changed: {
+    if (!_ready || clockWidget.isExpanded || clockWidget.fullScreenActive) return;
+    if (!clockWidget._prevChargingInit) return;
+    if (clockWidget._prevCharging === clockWidget.batteryCharging2) return;
+    clockWidget._prevCharging = clockWidget.batteryCharging2;
+    clockWidget.mode = "charging";
+    batteryModeTimer.restart();
+  }
+
   // --- Power menu state ---
   property bool showPowerMenu: false
   signal showPowerMenuRequested()
@@ -506,6 +559,78 @@ Rectangle {
         color: clockWidget.numLock ? Theme.text : Theme.subtext
         font { family: "Inter"; pixelSize: 13; weight: 700 }
         Behavior on color { ColorAnimation { duration: 120 } }
+      }
+    }
+
+    // Battery low
+    RowLayout {
+      spacing: 8
+      visible: clockWidget.mode === "battery"
+
+      Text {
+        text: "󰁺"
+        color: Theme.error
+        font { family: "JetBrainsMono Nerd Font"; pixelSize: 18 }
+      }
+
+      Text {
+        text: "Battery low"
+        color: Theme.text
+        font { family: "Inter"; pixelSize: 13; weight: 700 }
+      }
+
+      Text {
+        text: clockWidget.batteryPercent2 + "%"
+        color: Theme.error
+        font { family: "Inter"; pixelSize: 13; weight: 700 }
+      }
+    }
+
+    // Battery critical
+    RowLayout {
+      spacing: 8
+      visible: clockWidget.mode === "batteryCritical"
+
+      Text {
+        text: "󰂎"
+        color: Theme.error
+        font { family: "JetBrainsMono Nerd Font"; pixelSize: 18 }
+      }
+
+      Text {
+        text: "Battery critical"
+        color: Theme.error
+        font { family: "Inter"; pixelSize: 13; weight: 700 }
+      }
+
+      Text {
+        text: clockWidget.batteryPercent2 + "%"
+        color: Theme.error
+        font { family: "Inter"; pixelSize: 13; weight: 700 }
+      }
+    }
+
+    // Charge state change (plug in / unplug)
+    RowLayout {
+      spacing: 8
+      visible: clockWidget.mode === "charging"
+
+      Text {
+        text: clockWidget.batteryCharging2 ? "󱟩" : "󰂑"
+        color: clockWidget.batteryCharging2 ? Theme.success : Theme.warning
+        font { family: "JetBrainsMono Nerd Font"; pixelSize: 18 }
+      }
+
+      Text {
+        text: clockWidget.batteryCharging2 ? "Charging" : "On battery"
+        color: Theme.text
+        font { family: "Inter"; pixelSize: 13; weight: 700 }
+      }
+
+      Text {
+        text: clockWidget.batteryPercent2 + "%"
+        color: Theme.text
+        font { family: "Inter"; pixelSize: 13; weight: 700 }
       }
     }
 

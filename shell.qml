@@ -11,11 +11,13 @@ import "./Widgets/mode"
 import "./core"
 import "./Widgets/wallpaper"
 import "./Widgets/askpass"
+import "./Widgets/status"
 
 ShellRoot {
   id: root
 
   property bool isControlCenterOpen: false
+  property bool fullScreenActive: false
 
   NotificationService {
     id: notifService
@@ -68,6 +70,28 @@ ShellRoot {
       wallpaperSvc: wallpaperSvc
       modeSvc: modeSvc
       askpassSvc: askpassSvc
+      fullScreenActive: root.fullScreenActive
+    }
+  }
+
+  Process {
+    id: fullscreenProc
+    running: true
+    command: ["sh", "-c",
+      "while true; do " +
+      "  s=$(hyprctl activewindow -j 2>/dev/null | grep -o '\"fullscreen\": *[0-9]*' | head -1 | grep -o '[0-9]*$'); " +
+      "  [ -z \"$s\" ] && s=0; " +
+      "  echo \"f=$s\"; " +
+      "  sleep 0.5; " +
+      "done"
+    ]
+    stdout: SplitParser {
+      onRead: (data) => {
+        var line = data.trim();
+        if (line.length < 3 || line.charAt(0) !== 'f' || line.charAt(1) !== '=') return;
+        var val = parseInt(line.substring(2));
+        root.fullScreenActive = !isNaN(val) && val >= 2;
+      }
     }
   }
 
@@ -144,6 +168,69 @@ ShellRoot {
         onCloseRequested: clockItem.showAppLauncher = false
         onHoveredChanged: clockItem.appLauncherHovered = hovered
       }
+    }
+  }
+
+  // Always-on-top battery state popup (visible over fullscreen apps)
+  PanelWindow {
+    anchors { top: true; left: true; right: true }
+    implicitHeight: 70
+    color: "transparent"
+    visible: batteryPopup.opacity > 0
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.exclusiveZone: 0
+    WlrLayershell.focusable: false
+
+    BatteryPopup {
+      id: batteryPopup
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.top: parent.top
+      anchors.topMargin: 12
+    }
+  }
+
+  // Battery event controller: low warnings (30 / 15) + plug/unplug transitions.
+  Item {
+    id: batteryController
+    visible: false
+
+    property int battery: StatusService.battery
+    property bool charging: StatusService.charging
+    property bool _chargingInit: false
+    property bool _warned30: false
+    property bool _warned15: false
+
+    // Let StatusService settle after boot before treating a change as a transition.
+    Timer {
+      interval: 1500
+      running: true
+      repeat: false
+      onTriggered: batteryController._chargingInit = true
+    }
+
+    onBatteryChanged: {
+      if (!root.fullScreenActive) return;
+      if (batteryController.charging || batteryController.battery > 30) {
+        batteryController._warned30 = false;
+        batteryController._warned15 = false;
+        return;
+      }
+      if (batteryController.battery <= 15 && !batteryController._warned15) {
+        batteryController._warned15 = true;
+        batteryPopup.notify("low15");
+      } else if (batteryController.battery <= 30 && !batteryController._warned30) {
+        batteryController._warned30 = true;
+        batteryPopup.notify("low30");
+      }
+    }
+
+    onChargingChanged: {
+      if (!root.fullScreenActive) return;
+      if (!batteryController._chargingInit) return;
+      if (batteryController.charging)
+        batteryPopup.notify("charging");
+      else
+        batteryPopup.notify("unplug");
     }
   }
 

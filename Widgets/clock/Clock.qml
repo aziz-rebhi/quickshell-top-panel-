@@ -19,6 +19,7 @@ Item {
   property alias wallpaperSvc: mainWidget.wallpaperSvc
   property alias modeSvc: mainWidget.modeSvc
   property alias askpassSvc: mainWidget.askpassSvc
+  property alias fullScreenActive: mainWidget.fullScreenActive
 
   function showModeIndicator() { mainWidget.showModeIndicator(); }
 

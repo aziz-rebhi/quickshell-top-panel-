@@ -20,7 +20,7 @@ QtObject {
   readonly property string networkState: connType === "disconnected" ? "Disconnected" : "Connected"
 
   property Timer pollTimer: Timer {
-    interval: 5000; running: true; repeat: true; triggeredOnStart: true
+    interval: 1000; running: true; repeat: true; triggeredOnStart: true
     onTriggered: { pollProc.running = true }
   }
 
