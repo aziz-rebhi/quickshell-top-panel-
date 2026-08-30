@@ -726,7 +726,8 @@ Rectangle {
       }
 
       MouseArea {
-        anchors.fill: parent
+        Layout.fillWidth: true
+        Layout.fillHeight: true
         cursorShape: Qt.PointingHandCursor
         onClicked: {
           if (clockWidget.showWeather) {

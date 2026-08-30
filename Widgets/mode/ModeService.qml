@@ -1,7 +1,7 @@
 import Quickshell
 import Quickshell.Io
 import QtQuick
-import "../core"
+import "../../core"
 
 /*
  * nbfc set -s <speed> overrides the laptop's automatic temperature-based
