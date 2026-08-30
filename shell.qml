@@ -74,6 +74,35 @@ ShellRoot {
     }
   }
 
+  // Instant plug/unplug + battery events via udev (no polling delay).
+  Process {
+    id: udevBattery
+    running: true
+    command: ["sh", "-c",
+      "udevadm monitor --udev --property --subsystem-match=power_supply | while IFS= read -r line; do " +
+      "  case \"$line\" in " +
+      "    \"POWER_SUPPLY_ONLINE=1\")   echo \"P\";; " +
+      "    \"POWER_SUPPLY_ONLINE=0\")   echo \"U\";; " +
+      "    \"POWER_SUPPLY_STATUS=Charging\"|\"POWER_SUPPLY_STATUS=Full\") echo \"C\";; " +
+      "    \"POWER_SUPPLY_STATUS=Discharging\") echo \"D\";; " +
+      "    \"POWER_SUPPLY_CAPACITY=\"*) echo \"B=${line#POWER_SUPPLY_CAPACITY=}\";; " +
+      "  esac; " +
+      "done"
+    ]
+    stdout: SplitParser {
+      onRead: (data) => {
+        var l = data.trim();
+        if (l.length === 1) {
+          if (l === "P" || l === "C") { if (!StatusService.charging) StatusService.charging = true; }
+          else if (l === "U" || l === "D") { if (StatusService.charging) StatusService.charging = false; }
+        } else if (l.length > 2 && l.charAt(0) === 'B' && l.charAt(1) === '=') {
+          var cap = parseInt(l.substring(2));
+          if (!isNaN(cap)) StatusService.battery = cap;
+        }
+      }
+    }
+  }
+
   Process {
     id: fullscreenProc
     running: true
