@@ -98,7 +98,8 @@ ColumnLayout {
     ToggleTile {
       iconText: "󱐋"
       label: "Performance"
-      sublabel: modeSvc ? modeSvc.currentMode.charAt(0).toUpperCase() + modeSvc.currentMode.slice(1) : "Balanced"
+      sublabel: (modeSvc ? modeSvc.currentMode.charAt(0).toUpperCase() + modeSvc.currentMode.slice(1) : "Balanced")
+          + (modeSvc && modeSvc.thermalActive ? " · protected" : "")
       active: true
       expandable: true
       onExpandTapped: navigateTo("mode")

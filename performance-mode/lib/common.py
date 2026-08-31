@@ -64,6 +64,16 @@ def state_write(payload):
     os.replace(tmp, p)
 
 
+def state_merge(delta):
+    """Read the current state, overlay changes, write atomically.
+    Used by the thermal guard so mitigation updates don't clobber the
+    selected mode or per-lever results written by a user switch."""
+    st = state_read() or {}
+    st.update(delta)
+    state_write(st)
+    return st
+
+
 def state_mode():
     st = state_read()
     return st.get("mode") if st else None

@@ -29,7 +29,7 @@ performance-mode list
 performance-mode set <mode>        # apply (auto-elevates via sudo)
 performance-mode toggle            # cycle to next mode
 performance-mode doctor            # full system diagnosis
-performance-mode watch             # restore-on-boot + thermal watchdog (run by systemd)
+performance-mode watch             # restore-on-boot state init (run by systemd)
 ```
 
 ## Install
@@ -41,13 +41,13 @@ sudo ./performance-mode/install.sh
 This installs:
 - `/etc/sudoers.d/performance-mode` — NOPASSWD for `set <mode>` and `toggle` only, on this script
 - `/usr/local/bin/performance-mode` — symlink
-- `performance-mode.service` (systemd, root) — restores the last mode at boot and force-reverts
-  to **balanced** when CPU ≥ **88°C** (configurable in `config/config.toml` under `[watchdog]`)
+- `performance-mode.service` (systemd, root) — restores the last mode at boot if the state is
+  missing/invalid; no thermal watchdog, modes are never auto-changed during use
 
 ## QML integration
 
 - `Widgets/mode/ModeService.qml` — thin client: reads `/var/lib/performance-mode/state.json`,
-  calls the CLI for set/cycle. No QML-side watchdog anymore (controller owns it).
+  calls the CLI for set/cycle. No QML-side state logic.
 - `controlCenter/pages/ModePage.qml` — 5 mode cards.
 - `shell.qml` — `Alt+F5` / `/tmp/qs-mode-cycle` → `cycleMode()` (cycles all 5).
 
@@ -55,7 +55,7 @@ This installs:
 
 - Never disables zram, earlyoom, networking, audio, Wayland, NVMe, or stops critical services.
 - Every step is idempotent and reversible; an unsupported feature logs a WARNING and continues.
-- No automatic switching in v1 except the thermal watchdog revert.
+- No automatic switching in v1 (modes only change when you ask).
 - k10temp is the trusted temp sensor (acpitz reads a stuck ~100°C on this laptop).
 
 ## Security note

@@ -1,5 +1,5 @@
 [Unit]
-Description=Performance Mode Manager (state restore + thermal watchdog)
+Description=Performance Mode Manager (state restore at boot)
 Documentation=file:///home/dark/.config/quickshell/performance-mode/README.md
 After=local-fs.target systemd-modules-load.service
 

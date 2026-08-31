@@ -29,7 +29,18 @@ def _has_epp():
     return bool(ps) and os.path.exists(os.path.join(ps[0], "energy_performance_preference"))
 
 
-def _set_governor(governor):
+def load_fallback(available):
+    try:
+        cfg = load_config().get("defaults", {}).get("governor_fallback", [])
+    except Exception:
+        cfg = []
+    for g in cfg + ["schedutil", "ondemand", "conservative", "powersave"]:
+        if g in available:
+            return g
+    return available[0] if available else "schedutil"
+
+
+def set_governor(governor):
     ok = True
     chosen = governor
     for d in _policies():
@@ -46,18 +57,20 @@ def _set_governor(governor):
     return ok
 
 
-def load_fallback(available):
-    try:
-        cfg = load_config().get("defaults", {}).get("governor_fallback", [])
-    except Exception:
-        cfg = []
-    for g in cfg + ["schedutil", "ondemand", "conservative", "powersave"]:
-        if g in available:
-            return g
-    return available[0] if available else "schedutil"
+def set_boost(value):
+    w = "1" if value in (True, "1", 1) else "0"
+    targets = []
+    if os.path.exists("/sys/devices/system/cpu/cpufreq/boost"):
+        targets.append("/sys/devices/system/cpu/cpufreq/boost")
+    targets += [d + "/boost" for d in _policies() if os.path.exists(d + "/boost")]
+    ok = True
+    for t in dict.fromkeys(targets):
+        ok &= _write(t, w)
+    return ok
 
 
 def set_mode(mode, cfg):
+    notes = []
     ok = True
     if _has_epp():
         epp = EPP.get(mode)
@@ -65,28 +78,27 @@ def set_mode(mode, cfg):
             for d in _policies():
                 ok &= _write(os.path.join(d, "energy_performance_preference"), epp)
             log(f"cpu: EPP -> {epp}")
+    else:
+        notes.append("EPP unsupported (acpi-cpufreq, not amd_pstate)")
     governor = cfg.get("governor")
     if governor:
-        _set_governor(governor)
+        if not set_governor(governor):
+            ok = False
         log(f"cpu: governor -> {governor}")
     boost = cfg.get("boost")
     if boost is not None:
-        w = "1" if boost else "0"
-        targets = []
-        if os.path.exists("/sys/devices/system/cpu/cpufreq/boost"):
-            targets.append("/sys/devices/system/cpu/cpufreq/boost")
-        targets += [d + "/boost" for d in _policies() if os.path.exists(d + "/boost")]
-        for t in dict.fromkeys(targets):
-            _write(t, w)
-        log(f"cpu: boost -> {w}")
+        if not set_boost(boost):
+            ok = False
+        log(f"cpu: boost -> {'1' if boost else '0'}")
     pp = cfg.get("power_profile")
     if pp:
         rc, _out, err = run(["powerprofilesctl", "set", pp])
         if rc != 0:
+            notes.append("power-profiles-daemon not active")
             log(f"cpu: power-profiles-daemon '{pp}' failed: {err}", "WARNING")
         else:
             log(f"cpu: power profile -> {pp}")
-    return ok
+    return ok, "; ".join(notes)
 
 
 def status():

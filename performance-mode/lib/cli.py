@@ -20,7 +20,6 @@ MODE_LABELS = {
 
 def _print_status(json_out):
     from . import cpu, gpu, mem, fan
-    cfg = load_config()
     st = state_read()
     mode = st.get("mode") if st else None
     data = {
@@ -31,11 +30,21 @@ def _print_status(json_out):
         "mem": mem.status(),
         "tempC": thermal.cpu_temp(),
         "applied": (st or {}).get("applied"),
-        "watchdog": cfg.get("watchdog", {}),
+        "levers": (st or {}).get("levers"),
+        "effective": (st or {}).get("effective"),
+        "thermal": (st or {}).get("thermal"),
     }
     if json_out:
         print(json.dumps(data, indent=2))
         return
+    th = data.get("thermal") or {}
+    if th.get("active"):
+        print(f"thermal protection: ACTIVE (stage {th.get('stage')}) — CPU {th.get('last_temp','?')}°C, "
+              f"threshold {th.get('threshold')}°C")
+    eff = data.get("effective") or {}
+    if eff:
+        print(f"effective: governor {eff.get('governor')}  boost {eff.get('boost')}  "
+              f"nvidia_pm {eff.get('nvidia_runtime_pm')}  fan {eff.get('fan_curve')}")
     print(f"mode: {MODE_LABELS.get(mode, mode or 'none')} ({mode or 'none'})")
     print(f"governor: {data['cpu'].get('governor')}  boost: {data['cpu'].get('boost')}  "
           f"epp: {data['cpu'].get('epp') or '-'}")
@@ -68,22 +77,40 @@ def cmd_toggle():
 
 def cmd_watch():
     cfg = load_config()
-    w = cfg.get("watchdog", {})
-    thresh = w.get("threshold", 88)
-    poll = w.get("poll_seconds", 10)
-    revert = w.get("revert_to", "balanced")
+    th = cfg.get("thermal", {})
+    t_start = th.get("threshold", 88)
+    t_hard = th.get("hard_threshold", 92)
+    t_resume = th.get("resume", 82)
+    poll = th.get("poll_seconds", 10)
     st = state_read()
     if not st or st.get("mode") not in MODES:
-        log(f"watch: no valid state, restoring {revert}", "WARNING")
-        apply.apply_mode(revert)
-    log(f"watch: monitoring CPU temp (threshold {thresh}°C, poll {poll}s, revert -> {revert})")
+        log("watch: no valid state, restoring balanced", "WARNING")
+        apply.apply_mode("balanced")
+    log(f"watch: progressive thermal guard (poll {poll}s, mild>{t_start}C, "
+        f"hard>{t_hard}C, resume<{t_resume}C)")
+    time.sleep(3)
     while True:
         t = thermal.cpu_temp()
-        st = state_read()
-        m = st.get("mode") if st else revert
-        if m != revert and m in MODES and t is not None and t >= thresh:
-            log(f"watch: CPU {t:.0f}°C >= {thresh}°C in {m} -> force-revert to {revert}", "WARNING")
-            apply.apply_mode(revert)
+        st = state_read() or {}
+        mode = st.get("mode") if st.get("mode") in MODES else "balanced"
+        tstate = st.get("thermal") or {}
+        active = bool(tstate.get("active"))
+        stage = tstate.get("stage")
+        if mode in apply.HARD_MODES:
+            if active:
+                if t is not None and t < t_resume:
+                    log(f"watch: cooled to {t:.0f}C < {t_resume}C, restoring full {mode}")
+                    apply.apply_mode(mode)
+                elif stage != "hard" and t is not None and t >= t_hard:
+                    log(f"watch: CPU {t:.0f}C >= {t_hard}C in {mode} -> hard mitigation", "WARNING")
+                    apply.mitigate(mode, "hard")
+            elif t is not None and t >= t_start:
+                log(f"watch: CPU {t:.0f}C >= {t_start}C in {mode} -> mild mitigation (boost off)", "WARNING")
+                apply.mitigate(mode, "mild")
+        else:
+            if active:
+                log(f"watch: non-hard mode {mode}, clearing mitigation")
+                apply.apply_mode(mode)
         time.sleep(poll)
 
 
@@ -99,7 +126,7 @@ def main():
     sp_set.add_argument("mode")
     sub.add_parser("toggle", help="cycle to the next mode (root)")
     sub.add_parser("doctor", help="diagnose the system")
-    sub.add_parser("watch", help="state-restore + thermal watchdog loop (root)")
+    sub.add_parser("watch", help="restore-on-boot state init (run by systemd, root)")
 
     a = p.parse_args()
     if a.cmd is None:

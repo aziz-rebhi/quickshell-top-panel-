@@ -25,7 +25,7 @@ def apply(cfg):
         if v is not None:
             ok &= _set(syspath, v)
             log(f"mem: {syspath} -> {v}")
-    return ok
+    return ok, "" if ok else "sysctl write failed"
 
 
 def status():

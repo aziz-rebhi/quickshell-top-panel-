@@ -34,23 +34,25 @@ def _write(path, val):
 
 def set_mode(mode, cfg):
     if not available():
-        log("gpu: NVIDIA not present, skipping GPU tuning", "WARNING")
-        return True
+        return True, "NVIDIA not present — skipped"
+    notes = []
     ok = True
     ctrl = cfg.get("nvidia_control")
     if ctrl:
         for d in _nvidia_pcis():
-            ok &= _write(os.path.join(d, "power/control"), ctrl)
+            if not _write(os.path.join(d, "power/control"), ctrl):
+                ok = False
         log(f"gpu: NVIDIA PCI power/control -> {ctrl}")
     pm = cfg.get("nvidia_persistence")
     if pm is not None:
         rc, _out, err = run(["nvidia-smi", "-pm", "1" if pm else "0"])
         if rc != 0:
+            notes.append("nvidia-smi -pm failed")
             log(f"gpu: nvidia-smi -pm failed: {err}", "WARNING")
             ok = False
         else:
             log(f"gpu: NVIDIA persistence mode -> {'on' if pm else 'off'}")
-    return ok
+    return ok, "; ".join(notes)
 
 
 def status():

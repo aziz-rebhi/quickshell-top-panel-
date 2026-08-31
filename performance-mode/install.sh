@@ -23,7 +23,7 @@ SUDOERS
 chmod 0440 /etc/sudoers.d/performance-mode
 visudo -c
 
-echo "[4/5] systemd service (state restore + thermal watchdog)"
+echo "[4/5] systemd service (state restore at boot)"
 cp "$DIR/systemd/performance-mode.service" /etc/systemd/system/performance-mode.service
 systemctl daemon-reload
 systemctl enable --now performance-mode.service

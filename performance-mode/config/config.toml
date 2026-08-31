@@ -10,10 +10,15 @@
   # available on this box via acpi-cpufreq; left in for future amd_pstate use
   epp = { silent = "power", balanced = "balanced", on = "performance" }
 
-[watchdog]
-  threshold = 88            # °C — above this in any non-balanced mode → revert to balanced
+[thermal]
+  # Progressive guard for hard modes (performance/gaming/ai), driven by `watch`.
+  # Mild: disables CPU boost. Hard: also eases the governor to schedutil.
+  # The selected mode is never rewritten; only the effective levers change,
+  # so the panel can show requested-vs-effective with a reason.
+  threshold = 88          # °C — above this, mild mitigation starts
+  hard_threshold = 92     # °C — above this, hard mitigation (ease governor)
+  resume = 82             # °C — below this, the full selected mode is restored
   poll_seconds = 10
-  revert_to = "balanced"
 
 [state]
   file = "/var/lib/performance-mode/state.json"   # world-readable (0644); quickshell reads it

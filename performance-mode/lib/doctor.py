@@ -61,7 +61,4 @@ def report():
 
     print("\n-- Config --")
     cfg = load_config()
-    w = cfg.get("watchdog", {})
-    print(f"watchdog: threshold {w.get('threshold')}°C poll {w.get('poll_seconds')}s "
-          f"revert -> {w.get('revert_to')}")
     print(f"modes: {', '.join(cfg['mode'].keys())}")

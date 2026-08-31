@@ -5,9 +5,14 @@ import "../../core"
 
 /*
  * Thin client for the performance-mode controller (performance-mode/bin/).
- * The controller owns all policy (per-mode lever mapping) + the thermal
- * watchdog; this service only displays what it applied and forwards UI
- * requests to the CLI.
+ * The controller owns all policy; this service displays what was applied,
+ * what is actually effective on the hardware, and any active thermal guard,
+ * and forwards UI requests to the CLI.
+ *
+ * Selected vs. effective: `currentMode` is what the user chose. The state
+ * file's `effective` / `thermal` / `levers` blocks describe what the system
+ * is really doing right now, which can differ (thermal mitigation eases the
+ * policy, a lever may be unsupported, the guard never touches `mode`).
  *
  * State is polled by reading the file directly on a timer. FileView is not
  * used: the controller writes state.json atomically (temp file + rename), so
@@ -22,13 +27,59 @@ QtObject {
   property string currentMode: "balanced"
   property string errorText: ""
 
-  readonly property real cpuTemp: _tempBuf >= 0 ? _tempBuf : 0
-  property real _tempBuf: -1
+  // Live hardware monitor (drives cpuTemp and the Live System section)
+  property MonitorService monitor: MonitorService {}
 
-  property bool _applying: false
+  readonly property real cpuTemp: monitor.cpuTemp
+  readonly property int cpuUsage: monitor.cpuUsage
+  readonly property int cpuFreqMHz: monitor.cpuFreqMHz
+  readonly property int gpuTemp: monitor.gpuTemp
+  readonly property int gpuUsage: monitor.gpuUsage
+  readonly property bool gpuAvailable: monitor.gpuAvailable
+  readonly property int vramUsedMB: monitor.vramUsedMB
+  readonly property int vramTotalMB: monitor.vramTotalMB
+  readonly property real gpuPowerW: monitor.gpuPowerW
+  readonly property int fanRpm: monitor.fanRpm
+  readonly property int fanPct: monitor.fanPct
+
+  // Per-lever application results from the last switch
+  property var levers: ({})
+  // Real, current hardware policy read back by the controller
+  property var effective: ({})
+
+  // Flattened effective-policy readbacks (bound to the state var above)
+  readonly property string effectiveGovernor: effective["governor"] || ""
+  readonly property string effectiveBoost: effective["boost"] || ""
+  readonly property string effectiveEpp: effective["epp"] || ""
+  readonly property string effectiveNvPm: effective["nvidia_runtime_pm"] || ""
+  readonly property string effectivePersistence: effective["nvidia_persistence"] || ""
+  readonly property string effectivePpd: effective["power_profile"] || ""
+  readonly property string effectiveGamemode: effective["gamemode"] || ""
+  readonly property string effectiveFanCurve: effective["fan_curve"] || ""
+  readonly property string effectiveSwappiness: effective["swappiness"] || ""
+  readonly property string effectivePageCluster: effective["page_cluster"] || ""
+  readonly property string effectiveVfs: effective["vfs_cache_pressure"] || ""
+
+  // Thermal guard state (progressive protection, live from the watcher)
+  property bool thermalActive: false
+  property string thermalStage: ""
+  property int thermalThreshold: 88
+  property int thermalHardThreshold: 92
+  property int thermalResume: 82
+  property string thermalNote: ""
+  property real thermalLastTemp: 0
+  property real thermalSince: 0
+
+  // Switch transition state: "idle" -> "applying" -> "done"
+  property string transitionState: "idle"
+  property string transitionMode: ""
+
+  property real lastChange: 0
 
   readonly property string statePath: "/var/lib/performance-mode/state.json"
   readonly property string binPath: Quickshell.shellPath("performance-mode/bin/performance-mode")
+
+  property bool _applying: false
 
   property Timer pollTimer: Timer {
     interval: 4000
@@ -43,32 +94,15 @@ QtObject {
     }
   }
 
-  // Temperature is sampled for display only — the watchdog lives in the controller.
-  property Timer tempTimer: Timer {
-    interval: 8000
-    repeat: true
-    running: true
-    onTriggered: _root._sampleTemp()
-  }
-
-  property Process _tempProc: Process {
-    command: ["sh", "-c",
-      "for p in /sys/class/hwmon/hwmon*/temp1_input; do " +
-      "  d=$(cat $(dirname $p)/name 2>/dev/null); " +
-      "  if [ \"$d\" = \"k10temp\" ]; then cat $p; exit 0; fi; " +
-      "done; " +
-      "for p in /sys/class/hwmon/hwmon*/temp1_input; do cat $p; exit 0; done; " +
-      "echo 0"
-    ]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        var raw = parseInt(this.text.trim());
-        if (!isNaN(raw) && raw > 0) _tempBuf = raw / 1000;
-      }
+  // Clears the "done" flash after a successful switch
+  property Timer doneTimer: Timer {
+    interval: 1800
+    repeat: false
+    onTriggered: {
+      _root.transitionState = "idle"
+      _root.transitionMode = ""
     }
   }
-
-  function _sampleTemp() { _tempProc.running = true; }
 
   function _readState() {
     _stateProc.command = ["cat", statePath];
@@ -80,13 +114,42 @@ QtObject {
     if (!raw) return;
     try {
       var s = JSON.parse(raw);
+      var hasLevers = s.levers !== undefined && s.levers !== null;
       if (s.mode && modes.indexOf(s.mode) !== -1) {
         currentMode = s.mode;
+        if (s.time) lastChange = s.time;
         if (!_applying) errorText = "";
+      }
+      if (hasLevers) {
+        levers = s.levers;
+        effective = s.effective !== undefined && s.effective !== null ? s.effective : ({});
+        var t = s.thermal !== undefined && s.thermal !== null ? s.thermal : ({});
+        thermalActive = t["active"] === true;
+        thermalStage = t["stage"] || "";
+        if (t["threshold"]) thermalThreshold = t["threshold"];
+        if (t["hard_threshold"]) thermalHardThreshold = t["hard_threshold"];
+        if (t["resume"]) thermalResume = t["resume"];
+        thermalLastTemp = t["last_temp"] || 0;
+        thermalSince = t["since"] || 0;
+        thermalNote = t["note"] || "";
+        if (transitionState === "applying" && s.mode === transitionMode) {
+          transitionState = "done";
+          doneTimer.restart();
+        }
       }
     } catch (e) {
       console.warn("ModeService: invalid state file");
     }
+  }
+
+  function leverStatus(key) {
+    var l = levers[key];
+    return l ? l["status"] : "";
+  }
+
+  function leverNote(key) {
+    var l = levers[key];
+    return l && l["note"] ? l["note"] : "";
   }
 
   function setMode(mode) {
@@ -94,6 +157,8 @@ QtObject {
     if (_applying) return;
     _applying = true;
     errorText = "";
+    transitionMode = mode;
+    transitionState = "applying";
     var proc = Qt.createQmlObject(
       'import QtQuick; import Quickshell.Io;' +
       'Process { command: ["' + binPath + '", "set", "' + mode + '"]; stderr: StdioCollector {} }',
@@ -101,9 +166,10 @@ QtObject {
     proc.exited.connect(function(code) {
       _applying = false;
       if (code === 0) {
-        currentMode = mode;
         _readState();
       } else {
+        transitionState = "idle";
+        transitionMode = "";
         var err = proc.stderr && proc.stderr.text ? proc.stderr.text.trim().split("\n").pop() : "";
         errorText = "Mode switch failed (exit " + code + ")" + (err ? ": " + err : "")
             + ". Run `sudo ./performance-mode/install.sh` once.";
@@ -120,8 +186,15 @@ QtObject {
     setMode(nxt);
   }
 
+  function timeString(ts) {
+    if (!ts) return "—";
+    return new Date(ts * 1000).toLocaleTimeString(Qt.locale(), "HH:mm:ss");
+  }
+
+  readonly property string lastChangeString: timeString(lastChange)
+  readonly property string thermalSinceString: thermalSince > 0 ? timeString(thermalSince) : "—"
+
   Component.onCompleted: {
-    _sampleTemp();
     _readState();
   }
 }

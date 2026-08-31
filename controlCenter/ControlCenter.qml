@@ -808,9 +808,7 @@ PanelWindow {
               Layout.fillWidth: true
               Layout.fillHeight: true
               clip: true
-              currentMode: controlCenter.modeSvc ? controlCenter.modeSvc.currentMode : "balanced"
-              cpuTemp: controlCenter.modeSvc ? controlCenter.modeSvc.cpuTemp : 0
-              errorText: controlCenter.modeSvc ? controlCenter.modeSvc.errorText : ""
+              modeSvc: controlCenter.modeSvc
               onSetMode: (m) => { if (controlCenter.modeSvc) controlCenter.modeSvc.setMode(m); }
               onBackRequested: controlCenter.page = "main"
             }

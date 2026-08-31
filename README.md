@@ -50,7 +50,7 @@ Three modes that adjust power profile, fan speed, and GPU:
 | **Balanced** | `balanced` | auto | hybrid |
 | **Performance** | `performance` | 90% fixed | hybrid |
 
-A temperature watchdog polls CPU temp every 8 seconds and force-reverts to Balanced at ≥85°C.
+Modes are only switched on request (Alt+F5 or the mode page); nothing auto-changes during use.
 
 ### Media Integration
 
@@ -103,7 +103,7 @@ shell.qml (entrypoint)
 ├── IPC Process (polls /tmp/qs-* trigger files)
 ├── WallpaperService
 ├── AppLauncherService
-├── ModeService (power/fan/GPU profiles + temp watchdog)
+├── ModeService (power/fan/GPU profiles — control center thin client)
 ├── AskpassService
 └── ControlCenter (PanelWindow, overlay layer)
     ├── Audio page (Pipewire)
