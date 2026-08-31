@@ -18,7 +18,7 @@ Rectangle {
 
   onVisibleChanged: {
     if (visible) {
-      if (appService) appService.rescan();
+      if (appService && appService.appModel && appService.appModel.length === 0) appService.rescan();
       searchText = "";
       selectedIndex = 0;
       Qt.callLater(function() { appLauncher.forceActiveFocus(); });

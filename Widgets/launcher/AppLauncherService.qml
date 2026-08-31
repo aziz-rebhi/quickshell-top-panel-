@@ -15,17 +15,15 @@ QtObject {
     RunProcess.run(["sh", "-c", cmd], appService);
   }
 
+  property bool _scanning: false
+
   function rescan() {
-    scanProc.running = false;
+    if (_scanning) return;
+    _scanning = true;
     scanProc.running = true;
   }
 
-  property Timer rescanTimer: Timer {
-    interval: 10000
-    running: true
-    repeat: true
-    onTriggered: appService.rescan()
-  }
+  Component.onCompleted: appService.rescan()
 
   property Process scanProc: Process {
     command: ["sh", "-c",
@@ -91,7 +89,10 @@ QtObject {
           }
         }
         appService.appModel = list;
+        appService._scanning = false;
       }
     }
   }
+
+  Component.onDestruction: scanProc.running = false
 }
