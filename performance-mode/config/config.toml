@@ -1,0 +1,81 @@
+# performance-mode — system policy layer (5 modes)
+# switch with: performance-mode set <mode>
+# Every value is optional per mode; an unsupported feature degrades to a WARNING,
+# it never aborts the switch.
+
+[defaults]
+  # governor fallback order when the configured governor is unavailable
+  governor_fallback = ["schedutil", "ondemand", "conservative", "powersave"]
+  # EPP mapping for amd_pstate in active (EPP) mode
+  # available on this box via acpi-cpufreq; left in for future amd_pstate use
+  epp = { silent = "power", balanced = "balanced", on = "performance" }
+
+[watchdog]
+  threshold = 88            # °C — above this in any non-balanced mode → revert to balanced
+  poll_seconds = 10
+  revert_to = "balanced"
+
+[state]
+  file = "/var/lib/performance-mode/state.json"   # world-readable (0644); quickshell reads it
+  log = "/var/log/performance-mode.log"
+
+[mode.silent]
+  label = "Silent"
+  governor = "powersave"
+  boost = false
+  power_profile = "power-saver"       # syncs power-profiles-daemon so nothing fights
+  nvidia_control = "auto"             # NVIDIA PCI runtime-PM = on-demand (powers off)
+  nvidia_persistence = false
+  fan_speed = 30                      # fixed %; 0 means "automatic curve (nbfc set -a)"
+  swappiness = 100
+  page_cluster = 0
+  vfs_cache_pressure = 100
+
+[mode.balanced]
+  label = "Balanced"
+  governor = "schedutil"
+  boost = true
+  power_profile = "balanced"
+  nvidia_control = "auto"
+  nvidia_persistence = false
+  fan_speed = 0
+  swappiness = 100
+  page_cluster = 0
+  vfs_cache_pressure = 100
+
+[mode.performance]
+  label = "Performance"
+  governor = "performance"
+  boost = true
+  power_profile = "balanced"          # ppd has no "performance"; keep daemon neutral
+  nvidia_control = "on"               # NVIDIA clocked and powered on-demand off
+  nvidia_persistence = false
+  fan_speed = 90
+  swappiness = 60
+  page_cluster = 0
+  vfs_cache_pressure = 100
+
+[mode.gaming]
+  label = "Gaming"
+  governor = "performance"
+  boost = true
+  power_profile = "balanced"
+  nvidia_control = "on"
+  nvidia_persistence = true           # persistent driver — instant wake, higher idle draw
+  fan_speed = 95
+  swappiness = 60
+  page_cluster = 0
+  vfs_cache_pressure = 200
+  use_gamemode = true                 # honored if gamemode is installed (see README)
+
+[mode.ai]
+  label = "AI"
+  governor = "schedutil"              # responsive but lets cores sleep between ops
+  boost = true
+  power_profile = "balanced"
+  nvidia_control = "on"
+  nvidia_persistence = true
+  fan_speed = 90
+  swappiness = 120                    # with zram zstd, swap is cheap — keeps RAM for caches
+  page_cluster = 0
+  vfs_cache_pressure = 150

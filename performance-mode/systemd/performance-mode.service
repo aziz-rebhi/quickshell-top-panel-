@@ -1,0 +1,13 @@
+[Unit]
+Description=Performance Mode Manager (state restore + thermal watchdog)
+Documentation=file:///home/dark/.config/quickshell/performance-mode/README.md
+After=local-fs.target systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStart=/home/dark/.config/quickshell/performance-mode/bin/performance-mode watch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

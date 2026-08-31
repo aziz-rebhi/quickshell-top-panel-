@@ -644,6 +644,8 @@ Rectangle {
           if (!clockWidget.modeSvc) return "";
           var m = clockWidget.modeSvc.currentMode;
           if (m === "silent") return "";
+          if (m === "gaming") return "";
+          if (m === "ai") return "󰋛";
           if (m === "performance") return "";
           return "";
         }
@@ -651,6 +653,7 @@ Rectangle {
           if (!clockWidget.modeSvc) return Theme.subtext;
           var m = clockWidget.modeSvc.currentMode;
           if (m === "silent") return Theme.tertiary;
+          if (m === "gaming" || m === "ai") return Theme.error;
           if (m === "performance") return Theme.error;
           return Theme.primary;
         }
@@ -661,7 +664,14 @@ Rectangle {
         text: {
           if (!clockWidget.modeSvc) return "Balanced";
           var m = clockWidget.modeSvc.currentMode;
-          return m.charAt(0).toUpperCase() + m.slice(1);
+          var names = {
+            "silent": "Silent",
+            "balanced": "Balanced",
+            "performance": "Performance",
+            "gaming": "Gaming",
+            "ai": "AI"
+          };
+          return names[m] || "Balanced";
         }
         color: Theme.text
         font { family: "Inter"; pixelSize: 13; weight: 700 }

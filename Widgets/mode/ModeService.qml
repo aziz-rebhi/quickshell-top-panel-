@@ -4,38 +4,51 @@ import QtQuick
 import "../../core"
 
 /*
- * nbfc set -s <speed> overrides the laptop's automatic temperature-based
- * fan curve with a fixed fan speed. Only nbfc set -a restores the safe
- * automatic temperature curve. The temperature watchdog below is required
- * safety logic — removing it risks silent overheating in Silent or
- * Performance mode.
+ * Thin client for the performance-mode controller (performance-mode/bin/).
+ * The controller owns all policy (per-mode lever mapping) + the thermal
+ * watchdog; this service only displays what it applied and forwards UI
+ * requests to the CLI.
+ *
+ * State is polled by reading the file directly on a timer. FileView is not
+ * used: the controller writes state.json atomically (temp file + rename), so
+ * a file watcher bound to the old inode never fires, which froze the service
+ * on a stale mode forever.
  */
 
 QtObject {
   id: _root
+
+  readonly property var modes: ["silent", "balanced", "performance", "gaming", "ai"]
   property string currentMode: "balanced"
-  property int tempThreshold: 85
+  property string errorText: ""
 
   readonly property real cpuTemp: _tempBuf >= 0 ? _tempBuf : 0
   property real _tempBuf: -1
+
   property bool _applying: false
-  property bool _saving: false
 
-  readonly property string statePath: Quickshell.shellPath("scripts/mode-state.json")
+  readonly property string statePath: "/var/lib/performance-mode/state.json"
+  readonly property string binPath: Quickshell.shellPath("performance-mode/bin/performance-mode")
 
-  property FileView _stateReader: FileView {
-    path: statePath
-    preload: true
-    onLoaded: _restoreState()
-    onTextChanged: _restoreState()
+  property Timer pollTimer: Timer {
+    interval: 4000
+    repeat: true
+    running: true
+    onTriggered: _root._readState()
   }
 
-  // Always poll temperature; watchdog logic is inside onStreamFinished
+  property Process _stateProc: Process {
+    stdout: StdioCollector {
+      onStreamFinished: _root._parseState(this.text)
+    }
+  }
+
+  // Temperature is sampled for display only — the watchdog lives in the controller.
   property Timer tempTimer: Timer {
     interval: 8000
     repeat: true
     running: true
-    onTriggered: _sampleTemp()
+    onTriggered: _root._sampleTemp()
   }
 
   property Process _tempProc: Process {
@@ -50,113 +63,65 @@ QtObject {
     stdout: StdioCollector {
       onStreamFinished: {
         var raw = parseInt(this.text.trim());
-        if (!isNaN(raw) && raw > 0) {
-          _tempBuf = raw / 1000;
-          if (currentMode !== "balanced" && _tempBuf >= tempThreshold) {
-            console.warn("ModeService: CPU " + _tempBuf + "°C >= " + tempThreshold + "°C threshold — force-reverting to balanced");
-            _forceRevert();
-          }
-        }
+        if (!isNaN(raw) && raw > 0) _tempBuf = raw / 1000;
       }
     }
   }
 
   function _sampleTemp() { _tempProc.running = true; }
 
-  function _forceRevert() {
-    currentMode = "balanced";
-    RunProcess.run(["nbfc", "set", "-a"], _root);
-    _saveState();
+  function _readState() {
+    _stateProc.command = ["cat", statePath];
+    _stateProc.running = true;
   }
 
-  function setMode(mode) {
-    if (_applying || mode === currentMode) return;
-    _applying = true;
-
-    var plan = [];
-    if (mode === "silent") {
-      plan.push(["sh", "-c", "powerprofilesctl set power-saver 2>/dev/null || true"]);
-      plan.push(["sh", "-c", "nbfc set -s 30 2>/dev/null || true"]);
-      plan.push(["sh", "-c", "supergfxctl --mode integrated 2>/dev/null || true"]);
-    } else if (mode === "balanced") {
-      plan.push(["sh", "-c", "powerprofilesctl set balanced 2>/dev/null || true"]);
-      plan.push(["sh", "-c", "nbfc set -a 2>/dev/null || true"]);
-      plan.push(["sh", "-c", "supergfxctl --mode hybrid 2>/dev/null || true"]);
-    } else if (mode === "performance") {
-      plan.push(["sh", "-c", "powerprofilesctl set performance 2>/dev/null || true"]);
-      plan.push(["sh", "-c", "nbfc set -s 90 2>/dev/null || true"]);
-      plan.push(["sh", "-c", "supergfxctl --mode hybrid 2>/dev/null || true"]);
-    } else {
-      _applying = false;
-      return;
-    }
-
-    _execSequence(plan, function() {
-      currentMode = mode;
-      _applying = false;
-      _saveState();
-    });
-  }
-
-  function _execSequence(cmds, done) {
-    var i = 0;
-    function next() {
-      if (i >= cmds.length) {
-        if (done) done();
-        return;
-      }
-      var p = Qt.createQmlObject(
-        'import QtQuick; import Quickshell.Io; Process { command: ' + JSON.stringify(cmds[i]) + ' }', _root);
-      p.exited.connect(function() {
-        p.destroy();
-        i++;
-        next();
-      });
-      p.running = true;
-    }
-    next();
-  }
-
-  function cycleMode() {
-    var order = ["silent", "balanced", "performance"];
-    var idx = order.indexOf(currentMode);
-    setMode(idx === -1 || idx >= order.length - 1 ? order[0] : order[idx + 1]);
-  }
-
-  function _saveState() {
-    if (_saving) return;
-    _saving = true;
-    var data = JSON.stringify({ mode: currentMode });
-    var p = RunProcess.run([
-      "sh", "-c",
-      "mkdir -p $(dirname \"" + statePath + "\") && printf '%s\\n' \"" +
-        data.replace(/\"/g, '\\"') + "\" > \"" + statePath + ".tmp\" && mv -f \"" +
-        statePath + ".tmp\" \"" + statePath + "\""
-    ], _root);
-    p.exited.connect(function() { _saving = false; });
-  }
-
-  function _restoreState() {
-    // Skip while a mode transition is in flight (prevents re-entry from FileView text change)
-    if (_applying || _saving) return;
-    var raw = _stateReader.text().trim();
+  function _parseState(raw) {
+    raw = String(raw || "").trim();
     if (!raw) return;
     try {
       var s = JSON.parse(raw);
-      if ((s.mode === "silent" || s.mode === "performance") && s.mode !== currentMode) {
-        setMode(s.mode);
-      } else if (s.mode === "balanced") {
-        currentMode = "balanced";
+      if (s.mode && modes.indexOf(s.mode) !== -1) {
+        currentMode = s.mode;
+        if (!_applying) errorText = "";
       }
-    } catch(e) {
-      console.warn("ModeService: invalid state file, defaulting to balanced");
-      currentMode = "balanced";
-      _applying = false;
+    } catch (e) {
+      console.warn("ModeService: invalid state file");
     }
+  }
+
+  function setMode(mode) {
+    if (modes.indexOf(mode) === -1 || mode === currentMode) return;
+    if (_applying) return;
+    _applying = true;
+    errorText = "";
+    var proc = Qt.createQmlObject(
+      'import QtQuick; import Quickshell.Io;' +
+      'Process { command: ["' + binPath + '", "set", "' + mode + '"]; stderr: StdioCollector {} }',
+      _root);
+    proc.exited.connect(function(code) {
+      _applying = false;
+      if (code === 0) {
+        currentMode = mode;
+        _readState();
+      } else {
+        var err = proc.stderr && proc.stderr.text ? proc.stderr.text.trim().split("\n").pop() : "";
+        errorText = "Mode switch failed (exit " + code + ")" + (err ? ": " + err : "")
+            + ". Run `sudo ./performance-mode/install.sh` once.";
+        console.warn("ModeService: " + errorText);
+      }
+      proc.destroy();
+    });
+    proc.running = true;
+  }
+
+  function cycleMode() {
+    var idx = modes.indexOf(currentMode);
+    var nxt = idx === -1 || idx >= modes.length - 1 ? modes[0] : modes[idx + 1];
+    setMode(nxt);
   }
 
   Component.onCompleted: {
     _sampleTemp();
-    _restoreState();
+    _readState();
   }
 }
