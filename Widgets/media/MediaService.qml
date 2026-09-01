@@ -24,6 +24,31 @@ QtObject {
   property real length: 1
   property string identity: "Media Player"
 
+  // Poll the current playback position once a second (short-lived process).
+  // playerctl doesn't expose position through `metadata`, and the long-running
+  // `--follow` stream doesn't flush continuously through SplitParser, so we
+  // issue a one-shot `playerctl position` each tick instead.
+  property Timer positionTimer: Timer {
+    interval: 1000
+    repeat: true
+    running: playing
+    onTriggered: {
+      positionReadProc.command = ["playerctl", "-p", "playerctld", "position"];
+      positionReadProc.running = true;
+    }
+  }
+
+  property Process positionReadProc: Process {
+    command: ["true"]
+    running: false
+    stdout: SplitParser {
+      onRead: (data) => {
+        var val = parseFloat(data.trim());
+        if (!isNaN(val)) MediaService.position = val;
+      }
+    }
+  }
+
   property Process playerStatusProc: Process {
     command: [
       "playerctl",
@@ -104,7 +129,8 @@ QtObject {
         var len = parseFloat(parts[4]) || 0;
         var pos = parseFloat(parts[5]) || 0;
         length = len > 0 ? len / 1000000 : 1;
-        position = pos > 0 ? pos / 1000000 : 0;
+        if (pos > 0)
+          position = pos / 1000000;
 
         var newArt = "";
         if (artUrl && artUrl.startsWith("/"))

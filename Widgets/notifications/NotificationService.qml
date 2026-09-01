@@ -13,8 +13,11 @@ Item {
 
   NotificationServer {
     actionsSupported: true
+    imageSupported: true
+    bodyImagesSupported: true
 
     onNotification: (notification) => {
+      notification.tracked = true;
       var data = {
         appName: notification.appName,
         appIcon: notification.appIcon,
@@ -22,9 +25,14 @@ Item {
         body: notification.body,
         urgency: notification.urgency,
         id: notification.id,
+        ref: notification,
         actions: notification.actions,
         hasInlineReply: notification.hasInlineReply,
         inlineReplyPlaceholder: notification.inlineReplyPlaceholder,
+        resident: notification.resident,
+        image: notification.image,
+        progress: notification.hints && notification.hints["value"] !== undefined
+          ? (notification.hints["value"] * 100 / (notification.hints["value-max"] || 100)) : -1,
         timestamp: Date.now()
       };
 
@@ -40,7 +48,8 @@ Item {
 
       data._lock = lock;
 
-      if (!notifService.doNotDisturb) {
+      var isCritical = notification.urgency === NotificationUrgency.Critical;
+      if (!notifService.doNotDisturb || isCritical) {
         notifService.latestNotification = notification;
         notifService.latestNotificationData = data;
       }
@@ -50,6 +59,7 @@ Item {
       // Trim oldest entries and release their RetainableLocks to avoid leaks
       while (arr.length > 50) {
         var old = arr.shift();
+        if (old && old.ref) { try { old.ref.dismiss(); } catch (e) {} }
         if (old && old._lock) {
           try {
             old._lock.locked = false;
@@ -64,19 +74,29 @@ Item {
   function dismissNotif(item) {
     if (!item) return;
 
-    if (item.ref)
-      item.ref.dismiss();
-    else if (item.dismiss)
-      item.dismiss();
-
     var itemId = item.id;
-    if (itemId === undefined) return;
-
     var arr = storedNotifications.slice();
     var idx = -1;
-    for (var i = 0; i < arr.length; i++) {
-      if (arr[i].id === itemId) { idx = i; break; }
+    if (itemId !== undefined) {
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i].id === itemId) { idx = i; break; }
+      }
     }
+    if (idx < 0 && item.ref) {
+      for (var j = 0; j < arr.length; j++) {
+        if (arr[j].ref === item.ref) { idx = j; break; }
+      }
+    }
+
+    // Dismiss the server-side notification BEFORE releasing its lock, so the
+    // Notification object is still alive when we call dismiss() on it.
+    try {
+      if (item.ref)
+        item.ref.dismiss();
+      else if (item.dismiss)
+        item.dismiss();
+    } catch (e) {}
+
     if (idx >= 0) {
       var removed = arr[idx];
       if (removed._lock) {
@@ -87,16 +107,28 @@ Item {
     }
     storedNotifications = arr;
 
-    if (latestNotificationData && latestNotificationData.id === itemId)
-      latestNotificationData = null;
-    if (latestNotification && latestNotification.id === itemId)
-      latestNotification = null;
+    if (itemId !== undefined) {
+      if (latestNotificationData && latestNotificationData.id === itemId)
+        latestNotificationData = null;
+      if (latestNotification && latestNotification.id === itemId)
+        latestNotification = null;
+    } else if (item.ref) {
+      if (latestNotification === item.ref) { latestNotification = null; }
+      if (latestNotificationData && latestNotificationData.ref === item.ref)
+        latestNotificationData = null;
+    }
   }
 
   function dismissBanner(item) {
     // Only clears the active banner, keeps notification in history
-    var itemId = item && item.id;
+    if (!item) return;
+    var itemId = item.id;
     if (itemId === undefined) return;
+
+    if (item.ref)
+      item.ref.dismiss();
+    else if (item.dismiss)
+      item.dismiss();
 
     if (latestNotificationData && latestNotificationData.id === itemId)
       latestNotificationData = null;

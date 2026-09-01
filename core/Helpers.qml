@@ -25,6 +25,20 @@ QtObject {
     return days === 1 ? "Yesterday" : days + "d ago";
   }
 
+  function formatTime(sec) {
+    if (!(sec > 0)) return "0:00";
+    var total = Math.floor(sec);
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var s = total % 60;
+    var ss = s < 10 ? "0" + s : "" + s;
+    if (h > 0) {
+      var mm = m < 10 ? "0" + m : "" + m;
+      return h + ":" + mm + ":" + ss;
+    }
+    return m + ":" + ss;
+  }
+
   function youtubeThumb(url) {
     if (!url) return "";
     var match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);

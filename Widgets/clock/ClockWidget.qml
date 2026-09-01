@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
+import Quickshell.Services.Notifications
 import QtQuick
 import QtQuick.Layouts
 
@@ -314,13 +315,25 @@ Rectangle {
   }
 
   // --- Notification lifecycle ---
+  function notifShouldAutoDismiss() {
+    var d = latestNotificationData;
+    if (!d) return false;
+    if (d.actions && d.actions.length > 0) return false;
+    if (d.resident) return false;
+    return true;
+  }
+
   onLatestNotificationDataChanged: {
     if (_ready && latestNotificationData) {
       if (showPowerMenu) showPowerMenu = false;
       if (showAppLauncher) showAppLauncher = false;
       if (showWallpaperMenu) showWallpaperMenu = false;
       if (showColorPicker && wallpaperSvc) wallpaperSvc.cancelPick();
-      if (notifUnpinTimer) notifUnpinTimer.restart();
+      if (notifUnpinTimer) {
+        notifUnpinTimer.stop();
+        if (clockWidget.notifShouldAutoDismiss())
+          notifUnpinTimer.restart();
+      }
     }
   }
 
@@ -329,14 +342,16 @@ Rectangle {
   onNotifHoveredChanged: {
     if (notifHovered && notifUnpinTimer.running) {
       notifUnpinTimer.stop();
-    } else if (!notifHovered && _ready && latestNotificationData) {
+    } else if (!notifHovered && _ready && latestNotificationData && clockWidget.notifShouldAutoDismiss()) {
       notifUnpinTimer.restart();
     }
   }
 
   Timer {
     id: notifUnpinTimer
-    interval: 3500
+    interval: (clockWidget.latestNotificationData
+      && clockWidget.latestNotificationData.urgency === NotificationUrgency.Critical)
+      ? 6000 : 3500
     onTriggered: {
       clockWidget.notifBannerDismissed(clockWidget.latestNotificationData);
     }
@@ -365,7 +380,7 @@ Rectangle {
 
   // Size changes are the core of the Dynamic Island morph.
   // Regular expanded = 64×540; notification/power = 130×480; app launcher = 240×480; askpass = 200×480; collapsed = 36×auto.
-  height: showAppLauncher ? 240 : (showWallpaperMenu ? 300 : (showAskpass ? 200 : (showColorPicker || latestNotificationData || showPowerMenu ? 130 : (isExpanded ? 84 : 36))))
+  height: showAppLauncher ? 240 : (showWallpaperMenu ? 300 : (showAskpass ? 200 : (showColorPicker ? 130 : (latestNotificationData ? (notifBanner ? notifBanner.bannerHeight + 16 : 144) : (showPowerMenu ? 130 : (isExpanded ? 84 : 36))))))
   width: showWallpaperMenu ? 640 : (showAskpass || showColorPicker || latestNotificationData || showPowerMenu || showAppLauncher ? 480 : (isExpanded ? 540 : (mode !== "default" ? indicatorRow.implicitWidth + 86 : collapsedRow.implicitWidth + 86)))
   radius: showColorPicker ? 28 : (showWallpaperMenu ? 28 : (showAskpass || latestNotificationData || showPowerMenu || showAppLauncher ? 28 : (isExpanded ? 22 : 18)))
   color: Theme.background

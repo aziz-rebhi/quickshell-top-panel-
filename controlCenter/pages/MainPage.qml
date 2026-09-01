@@ -5,6 +5,7 @@ import "../../Widgets/notifications"
 import "../../core"
 
 ColumnLayout {
+  id: mainPage
   spacing: 12
 
   property string page: ""
@@ -272,6 +273,18 @@ ColumnLayout {
               onClicked: activePlayer?.next()
             }
           }
+        }
+
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: 8
+          Layout.topMargin: 6
+
+          Text {
+            text: Helpers.formatTime(activePlayer?.position ?? 0)
+            color: Theme.subtext
+            font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 10; weight: 800 }
+          }
 
           Rectangle {
             Layout.fillWidth: true
@@ -286,9 +299,15 @@ ColumnLayout {
               radius: 1.5
               color: Theme.text
               width: parent.width * (activePlayer && activePlayer.length > 0
-                ? activePlayer.position / activePlayer.length
+                ? Math.min(1, Math.max(0, activePlayer.position / activePlayer.length))
                 : 0)
             }
+          }
+
+          Text {
+            text: Helpers.formatTime(activePlayer?.length ?? 0)
+            color: Theme.subtext
+            font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 10; weight: 800 }
           }
         }
       }
@@ -299,7 +318,7 @@ ColumnLayout {
     id: notifHist
     Layout.fillWidth: true
     visible: (storedNotifications?.length ?? 0) > 0
-    onDismissNotif: (notifRef) => dismissNotif(notifRef)
+    onDismissNotif: (notifRef) => mainPage.dismissNotif(notifRef)
     onClearAll: clearNotifs()
   }
 

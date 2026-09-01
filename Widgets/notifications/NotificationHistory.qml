@@ -62,16 +62,16 @@ Rectangle {
 
       Text {
         text: "Notifications"
-        color: Theme.text
+        color: "#acb0d0"
         opacity: 0.7
-        font { family: "Inter"; pixelSize: 11; weight: 700 }
+        font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 11; weight: 800 }
         Layout.fillWidth: true
       }
 
       Text {
         text: "Clear all"
         color: Theme.primary
-        font { family: "Inter"; pixelSize: 11; weight: 600 }
+        font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 11; weight: 800 }
         visible: (historyRoot.storedNotifications?.length ?? 0) > 1
 
         MouseArea {
@@ -126,8 +126,8 @@ Rectangle {
 
                 Text {
                   text: modelData.appName || "Unknown"
-                  color: Theme.text
-                  font { family: "Inter"; pixelSize: 12; weight: 700 }
+                  color: "#acb0d0"
+                  font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 12; weight: 800 }
                   elide: Text.ElideRight
                   Layout.fillWidth: true
                 }
@@ -136,21 +136,21 @@ Rectangle {
                   implicitWidth: countText.implicitWidth + 10
                   implicitHeight: 18
                   radius: 9
-                  color: Theme.surface
+                  color: "#101014"
                   visible: modelData.items.length > 1
 
                   Text {
                     id: countText
                     anchors.centerIn: parent
                     text: modelData.items.length
-                    color: Theme.muted
-                    font { family: "Inter"; pixelSize: 10; weight: 600 }
+                    color: "#787c99"
+                    font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 10; weight: 800 }
                   }
                 }
 
                 Text {
                   text: groupCard.groupExpanded ? "" : ""
-                  color: Theme.subtext
+                  color: "#787c99"
                   font { family: "JetBrainsMono Nerd Font"; pixelSize: 12 }
                 }
 
@@ -204,16 +204,16 @@ Rectangle {
                           Text {
                             text: modelData.summary || ""
                             color: modelData.urgency === NotificationUrgency.Critical
-                              ? Theme.error : Theme.text
-                            font { family: "Inter"; pixelSize: 12; weight: 600 }
+                              ? Theme.error : "#acb0d0"
+                            font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 12; weight: 800 }
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                           }
 
                           Text {
                             text: Helpers.relTime(modelData.timestamp)
-                            color: Theme.muted
-                            font { family: "Inter"; pixelSize: 9; weight: 500 }
+                            color: "#787c99"
+                            font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 9; weight: 800 }
                             opacity: 0.6
                           }
                         }
@@ -221,12 +221,35 @@ Rectangle {
                         Text {
                           text: modelData.body || ""
                           visible: text !== ""
-                          color: Theme.subtext
-                          font { family: "Inter"; pixelSize: 10 }
+                          color: "#787c99"
+                          font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 10; weight: 400 }
                           Layout.fillWidth: true
                           Layout.topMargin: 1
                           maximumLineCount: 2
                           wrapMode: Text.WordWrap
+                        }
+
+                        Item {
+                          Layout.fillWidth: true
+                          Layout.topMargin: 4
+                          visible: !!modelData.image
+                          implicitHeight: 80
+
+                          Rectangle {
+                            anchors.fill: parent
+                            radius: 8
+                            color: "#101014"
+                            border.width: 1
+                            border.color: "#262632"
+                            clip: true
+
+                            Image {
+                              anchors.fill: parent
+                              source: modelData.image || ""
+                              fillMode: Image.PreserveAspectFit
+                              asynchronous: true
+                            }
+                          }
                         }
 
                         Flow {
@@ -249,7 +272,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 text: modelData.text || ""
                                 color: Theme.primary
-                                font { family: "Inter"; pixelSize: 9; weight: 600 }
+                                font { family: "JetBrainsMono Nerd Font Propo"; pixelSize: 9; weight: 800 }
                               }
 
                               MouseArea {
