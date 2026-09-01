@@ -302,6 +302,16 @@ ColumnLayout {
                 ? Math.min(1, Math.max(0, activePlayer.position / activePlayer.length))
                 : 0)
             }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: (mouse) => {
+                if (activePlayer && activePlayer.length > 0) {
+                  activePlayer.seek(activePlayer.length * (mouse.x / parent.width));
+                }
+              }
+            }
           }
 
           Text {

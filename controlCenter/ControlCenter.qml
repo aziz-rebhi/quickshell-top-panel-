@@ -596,6 +596,7 @@ PanelWindow {
         function previous() { MediaService.previous() }
         function togglePlaying() { MediaService.togglePlaying() }
         function next() { MediaService.next() }
+        function seek(seconds) { MediaService.seek(seconds) }
     }
 
     property string playerArt: MediaService.art

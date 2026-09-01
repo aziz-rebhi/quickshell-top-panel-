@@ -100,6 +100,10 @@ QtObject {
     transportProc.command = ["playerctl", "--player=playerctld", "next"];
     transportProc.running = true;
   }
+  function seek(seconds) {
+    transportProc.command = ["playerctl", "--player=playerctld", "position", "" + seconds];
+    transportProc.running = true;
+  }
 
   function fetchMetadata() {
     playerMetadataProc.running = false;
