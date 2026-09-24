@@ -12,6 +12,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../Widgets/notifications"
 import "../Widgets/media"
+import "../Widgets/status"
 import "../core"
 
 PanelWindow {
@@ -21,8 +22,19 @@ PanelWindow {
 
     property string page: "main"
     onIsOpenChanged: {
-        if (isOpen) page = "main";
-        else { wifiPendingSsid = ""; wifiConnectError = ""; }
+        if (isOpen) {
+            page = "main";
+            panel.opacity = 0;
+            panelScale.xScale = 0.4;
+            panelScale.yScale = 0.4;
+            panelOpenAnim.restart();
+        } else {
+            wifiPendingSsid = "";
+            wifiConnectError = "";
+            panel.opacity = 0;
+            panelScale.xScale = 0.4;
+            panelScale.yScale = 0.4;
+        }
     }
     onPageChanged: {
         if (page === "wifi") {
@@ -641,8 +653,40 @@ PanelWindow {
         border.color: Theme.surface
         border.width: 2
         clip: true
+        opacity: 0
+        transformOrigin: Item.TopCenter
+        transform: Scale { id: panelScale; xScale: 0.4; yScale: 0.4 }
 
         Behavior on height { enabled: controlCenter.page === "main"; NumberAnimation { duration: 180; easing.type: Easing.InOutQuad } }
+
+        ParallelAnimation {
+            id: panelOpenAnim
+            running: false
+            NumberAnimation {
+                target: panel
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: panelScale
+                property: "xScale"
+                from: 0.4
+                to: 1
+                duration: 300
+                easing.type: Easing.OutQuart
+            }
+            NumberAnimation {
+                target: panelScale
+                property: "yScale"
+                from: 0.4
+                to: 1
+                duration: 300
+                easing.type: Easing.OutQuart
+            }
+        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -680,6 +724,28 @@ PanelWindow {
                     color: Theme.text
                     font { family: "Inter"; pixelSize: Fonts.title; weight: 700 }
                     Layout.fillWidth: true
+                }
+
+                Text {
+                    Layout.alignment: Qt.AlignRight
+                    text: {
+                        if (StatusService.powerState === "Full") return "󰂅";
+                        if (StatusService.charging) return "󰂄";
+                        var p = StatusService.battery;
+                        if (p > 80) return "󰁹";
+                        if (p > 50) return "󰂀";
+                        if (p > 20) return "󰁽";
+                        return "󰁺";
+                    }
+                    color: StatusService.battery > 20 ? Theme.primary : Theme.error
+                    font { family: "JetBrainsMono Nerd Font"; pixelSize: Fonts.iconSmall }
+                }
+
+                Text {
+                    Layout.alignment: Qt.AlignRight
+                    text: StatusService.battery + "%"
+                    color: Theme.text
+                    font { family: "Inter"; pixelSize: Fonts.small; weight: 700 }
                 }
             }
 

@@ -65,7 +65,7 @@ Rectangle {
           cursorShape: Qt.PointingHandCursor
           onEntered: powerMenu.hovered = true
           onExited: powerMenu.hovered = false
-          onClicked: if (powerMenu.powerAction) powerMenu.powerAction(["hyprlock"])
+          onClicked: if (powerMenu.powerAction) powerMenu.powerAction(["bash", "/home/dark/.config/hypr/scripts/lock.sh"])
         }
       }
       Text { text: "Lock"; color: Theme.text; opacity: 0.6; font.family: "Inter"; font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
@@ -93,7 +93,7 @@ Rectangle {
           cursorShape: Qt.PointingHandCursor
           onEntered: powerMenu.hovered = true
           onExited: powerMenu.hovered = false
-          onClicked: if (powerMenu.powerAction) powerMenu.powerAction(["systemctl", "suspend"])
+          onClicked: if (powerMenu.powerAction) powerMenu.powerAction(["bash", "-c", "/home/dark/.config/hypr/scripts/sleep.sh"])
         }
       }
       Text { text: "Sleep"; color: Theme.text; opacity: 0.6; font.family: "Inter"; font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }

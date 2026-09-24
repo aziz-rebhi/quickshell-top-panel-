@@ -9,16 +9,16 @@ import "../media"
 import "../status"
 import "../notifications"
 import "../power"
+import "../launcher"
 import "../wallpaper"
 import "../askpass"
 import "../../core"
-import "../weather"
 
 Rectangle {
   id: clockWidget
 
   property bool isPinned: false
-  property bool isExpanded: mouseArea.containsMouse || statusCapsule.isHovered || isPinned
+  property bool isExpanded: mouseArea.containsMouse || isPinned
   signal toggleControlCenter()
 
   // --- Morph mode ---
@@ -191,6 +191,7 @@ Rectangle {
   // --- App launcher state ---
   property bool showAppLauncher: false
   property bool appLauncherHovered: false
+  property var appLauncherSvc: null
   property Timer appLauncherTimer: Timer {
     interval: 15000
     onTriggered: clockWidget.showAppLauncher = false
@@ -337,7 +338,7 @@ Rectangle {
     }
   }
 
-  readonly property bool notifHovered: (mouseArea && mouseArea.containsMouse) || (statusCapsule && statusCapsule.isHovered) || (notifBanner && notifBanner.bannerHovered)
+  readonly property bool notifHovered: (mouseArea && mouseArea.containsMouse) || (notifBanner && notifBanner.bannerHovered)
 
   onNotifHoveredChanged: {
     if (notifHovered && notifUnpinTimer.running) {
@@ -363,16 +364,35 @@ Rectangle {
     onTriggered: mode = "default"
   }
 
-  // --- Weather ---
-  property bool showWeather: false
-  property Timer weatherTimer: Timer {
-    interval: 5000
-    onTriggered: clockWidget.showWeather = false
+  // --- Day roll animation (midnight tick, makes the dates "move forward") ---
+  property int dayRollY: 0
+  Behavior on dayRollY { NumberAnimation { duration: 280; easing.type: Easing.OutQuart } }
+  property string lastDayKey: ""
+
+  Connections {
+    target: clock
+    function onDateChanged() {
+      var key = Qt.formatDateTime(clock.date, "yyyy-MM-dd");
+      if (clockWidget.lastDayKey === "") {
+        clockWidget.lastDayKey = key;
+        return;
+      }
+      if (clockWidget.lastDayKey !== key) {
+        clockWidget.lastDayKey = key;
+        clockWidget.dayRollY = -6;
+        dayRollTimer.restart();
+      }
+    }
+  }
+
+  Timer {
+    id: dayRollTimer
+    interval: 620
+    onTriggered: clockWidget.dayRollY = 0
   }
 
   // --- Layout ---
   // MediaService is a pragma Singleton (shared with ControlCenter)
-  WeatherService { id: weatherSvc }
 
   // --- Askpass dialog state ---
   property var askpassSvc: null
@@ -380,8 +400,8 @@ Rectangle {
 
   // Size changes are the core of the Dynamic Island morph.
   // Regular expanded = 64×540; notification/power = 130×480; app launcher = 240×480; askpass = 200×480; collapsed = 36×auto.
-  height: showAppLauncher ? 240 : (showWallpaperMenu ? 300 : (showAskpass ? 200 : (showColorPicker ? 130 : (latestNotificationData ? (notifBanner ? notifBanner.bannerHeight + 16 : 144) : (showPowerMenu ? 130 : (isExpanded ? 84 : 36))))))
-  width: showWallpaperMenu ? 640 : (showAskpass || showColorPicker || latestNotificationData || showPowerMenu || showAppLauncher ? 480 : (isExpanded ? 540 : (mode !== "default" ? indicatorRow.implicitWidth + 86 : collapsedRow.implicitWidth + 86)))
+  height: showAppLauncher ? 240 : (showWallpaperMenu ? 300 : (showAskpass ? 200 : (showColorPicker ? 130 : (latestNotificationData ? (notifBanner ? notifBanner.bannerHeight + 16 : 144) : (showPowerMenu ? 130 : (isExpanded ? 116 : 36))))))
+  width: showWallpaperMenu ? 640 : (showAskpass || showColorPicker || latestNotificationData || showPowerMenu || showAppLauncher ? 480 : (isExpanded ? 500 : (mode !== "default" ? indicatorRow.implicitWidth + 86 : collapsedRow.implicitWidth + 86)))
   radius: showColorPicker ? 28 : (showWallpaperMenu ? 28 : (showAskpass || latestNotificationData || showPowerMenu || showAppLauncher ? 28 : (isExpanded ? 22 : 18)))
   color: Theme.background
 
@@ -406,11 +426,6 @@ Rectangle {
         return;
       }
       if (clockWidget.showAppLauncher) return;
-      if (clockWidget.isExpanded) {
-        let mappedPos = mouseArea.mapToItem(expandedContent, mouse.x, mouse.y);
-        let clickedItem = expandedContent.childAt(mappedPos.x, mappedPos.y);
-        if (clickedItem !== null) return;
-      }
       clockWidget.isPinned = !clockWidget.isPinned;
     }
   }
@@ -696,82 +711,132 @@ Rectangle {
   }
 
   // --- Expanded content (regular) ---
-  // Visible when expanded with no notification: shows media player, clock, status capsule.
+  // One unified capsule: existing content on the left, large clock + date +
+  // calendar strip on the right.
   Item {
     id: expandedContent
-    anchors.fill: parent
-    anchors.leftMargin: 16
-    anchors.rightMargin: 16
+        anchors.fill: parent
+    anchors.leftMargin: 30
+    anchors.rightMargin: 50
 
     opacity: clockWidget.isExpanded && !clockWidget.showingNotification ? 1.0 : 0.0
     visible: opacity > 0.0
     Behavior on opacity { NumberAnimation { duration: 150 } }
 
-    MediaSection {
-      id: mediaSection
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      width: Math.min(implicitWidth, (parent.width - clockView.implicitWidth) / 2 - 8)
-      clip: true
-      trackTitle: MediaService.title
-      trackArtist: MediaService.artist
-      trackArt: MediaService.art
-      mediaState: MediaService.mediaState
-      barHeights: MediaService.bars
-    }
+    RowLayout {
+      anchors.fill: parent
+      spacing: 24
 
-    ColumnLayout {
-      id: clockView
-      anchors.centerIn: parent
-      spacing: 4
-
-      WeatherWidget {
-        visible: clockWidget.showWeather
-        temperature: weatherSvc.temperature
-        weatherCode: weatherSvc.weatherCode
-        city: weatherSvc.city
-        Layout.alignment: Qt.AlignHCenter
-      }
-
-      Text {
-        text: Qt.formatDateTime(clock.date, "HH:mm")
-        visible: !clockWidget.showWeather
-        color: Theme.text
-        Layout.alignment: Qt.AlignHCenter
-        font { family: "Inter"; pixelSize: 20; weight: 700 }
-      }
-
-      Text {
-        text: Qt.formatDateTime(clock.date, "ddd, MMM d")
-        visible: !clockWidget.showWeather
-        color: Theme.text
-        opacity: 0.5
-        Layout.alignment: Qt.AlignHCenter
-        font { family: "Inter"; pixelSize: 11; weight: 500 }
-      }
-
-      MouseArea {
+      // LEFT section (~65-70%): existing content
+      ColumnLayout {
+        id: leftSection
         Layout.fillWidth: true
-        Layout.fillHeight: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: {
-          if (clockWidget.showWeather) {
-            clockWidget.showWeather = false;
-          } else {
-            clockWidget.showWeather = true;
-            weatherSvc.fetchWeather();
-            clockWidget.weatherTimer.restart();
+        Layout.alignment: Qt.AlignVCenter
+        spacing: 10
+
+        MediaSection {
+          id: mediaSection
+          Layout.alignment: Qt.AlignLeft
+          clip: true
+          trackTitle: MediaService.title
+          trackArtist: MediaService.artist
+          trackArt: MediaService.art
+          mediaState: MediaService.mediaState
+          barHeights: MediaService.bars
+          onPreviousRequested: MediaService.previous()
+          onToggleRequested: MediaService.togglePlaying()
+          onNextRequested: MediaService.next()
+        }
+      }
+
+      // RIGHT section (~30-35%): large clock + date + calendar strip
+      ColumnLayout {
+        id: clockView
+        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+        spacing: 2
+
+        Text {
+          text: Qt.formatDateTime(clock.date, "HH:mm")
+          color: Theme.text
+          font { family: Fonts.main; pixelSize: 24; weight: Font.Bold }
+          Layout.alignment: Qt.AlignHCenter
+        }
+
+        // Weekday letters as stepped podium (5 days, today peaks, dates cascade down + fade both sides)
+        Row {
+          Layout.alignment: Qt.AlignRight
+          Layout.topMargin: 3
+          spacing: 3
+          transform: Translate { y: clockWidget.dayRollY }
+
+          Repeater {
+            model: 5
+
+            delegate: Item {
+              readonly property date stepDay: {
+                var base = new Date(clock.date);
+                base.setDate(base.getDate() + index - 2);
+                return base;
+              }
+              readonly property int distance: Math.abs(index - 2)
+              readonly property int cellSize: [9, 7, 6][distance]
+              readonly property real stepOpacity: [1.0, 0.5, 0.22][distance]
+              readonly property int stepY: [-4, 0, 5][distance]
+              readonly property var letters: ["S", "M", "T", "W", "T", "F", "S"]
+
+              width: distance === 0 ? 26 : 18
+              height: 12
+
+              Text {
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: stepY
+                text: distance === 0
+                  ? Qt.formatDate(stepDay, "ddd").toUpperCase()
+                  : letters[stepDay.getDay()].toUpperCase()
+                color: distance === 0 ? Theme.primary : Theme.text
+                opacity: stepOpacity
+                font { family: Fonts.main; pixelSize: cellSize; weight: distance === 0 ? Font.Bold : Font.Normal }
+              }
+            }
+          }
+        }
+
+        // Day numbers as stepped podium (5 days, today peaks, dates cascade down + fade both sides)
+        Row {
+          Layout.alignment: Qt.AlignRight
+          Layout.topMargin: 2
+          spacing: 3
+          transform: Translate { y: clockWidget.dayRollY }
+
+          Repeater {
+            model: 5
+
+            delegate: Item {
+              readonly property date stepDay: {
+                var base = new Date(clock.date);
+                base.setDate(base.getDate() + index - 2);
+                return base;
+              }
+              readonly property int distance: Math.abs(index - 2)
+              readonly property int cellSize: [13, 10, 9][distance]
+              readonly property real stepOpacity: [1.0, 0.5, 0.22][distance]
+              readonly property int stepY: [-4, 0, 5][distance]
+
+              width: distance === 0 ? 26 : 18
+              height: 18
+
+              Text {
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: stepY
+                text: stepDay.getDate()
+                color: distance === 0 ? Theme.primary : Theme.text
+                opacity: stepOpacity
+                font { family: Fonts.main; pixelSize: cellSize; weight: distance === 0 ? Font.Bold : Font.Normal }
+              }
+            }
           }
         }
       }
-    }
-
-    StatusCapsule {
-      id: statusCapsule
-      anchors.right: parent.right
-      anchors.rightMargin: 20
-      anchors.verticalCenter: parent.verticalCenter
-      onClicked: clockWidget.toggleControlCenter()
     }
   }
 
@@ -781,6 +846,16 @@ Rectangle {
     anchors.fill: parent
     visible: clockWidget.showPowerMenu
     powerAction: clockWidget.powerAction
+  }
+
+  // --- App launcher overlay ---
+  AppLauncher {
+    id: appLauncherOverlay
+    anchors.fill: parent
+    visible: clockWidget.showAppLauncher
+    appService: clockWidget.appLauncherSvc
+    onCloseRequested: clockWidget.showAppLauncher = false
+    onHoveredChanged: clockWidget.appLauncherHovered = hovered
   }
 
   // --- Wallpaper menu overlay ---

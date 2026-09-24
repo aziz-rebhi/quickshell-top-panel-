@@ -13,6 +13,10 @@ RowLayout {
     property string mediaState: "Idle"
     property var barHeights: [2, 2, 2, 2]
 
+    signal previousRequested()
+    signal toggleRequested()
+    signal nextRequested()
+
     Rectangle {
         width: 44
         height: 44
@@ -79,6 +83,78 @@ RowLayout {
             elide: Text.ElideRight
             Layout.maximumWidth: 120
             font { family: "Inter"; pixelSize: 10 }
+        }
+
+        RowLayout {
+            spacing: 4
+            Layout.alignment: Qt.AlignLeft
+            Layout.topMargin: 2
+
+            Rectangle {
+                width: 22
+                height: 22
+                radius: 11
+                color: Theme.container
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰒮"
+                    color: Theme.text
+                    font { family: "JetBrainsMono Nerd Font"; pixelSize: 10 }
+                }
+
+                MouseArea {
+                    id: mediaPrev
+                    anchors.fill: parent
+                    
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mediaSection.previousRequested()
+                }
+            }
+
+            Rectangle {
+                width: 22
+                height: 22
+                radius: 11
+                color: Theme.container
+
+                Text {
+                    anchors.centerIn: parent
+                    text: mediaSection.mediaState === "Playing" ? "󰏤" : "󰐊"
+                    color: mediaSection.mediaState === "Playing" ? Theme.primary : Theme.text
+                    font { family: "JetBrainsMono Nerd Font"; pixelSize: 11 }
+                }
+
+                MouseArea {
+                    id: mediaToggle
+                    anchors.fill: parent
+                    
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mediaSection.toggleRequested()
+                }
+            }
+
+            Rectangle {
+                width: 22
+                height: 22
+                radius: 11
+                color: Theme.container
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰒭"
+                    color: Theme.text
+                    font { family: "JetBrainsMono Nerd Font"; pixelSize: 10 }
+                }
+
+                MouseArea {
+                    id: mediaNext
+                    anchors.fill: parent
+                    
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: mediaSection.nextRequested()
+                }
+            }
         }
     }
 }

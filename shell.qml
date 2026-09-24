@@ -33,14 +33,15 @@ ShellRoot {
     WlrLayershell.exclusiveZone: 56
     // Exclusive keyboard grab when the askpass dialog is open — enables the
     // password field to receive keystrokes without requiring a click first.
-    WlrLayershell.keyboardFocus: clockItem.showAskpass ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: clockItem.showAskpass || clockItem.showAppLauncher ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     MouseArea {
       anchors.fill: parent
-      enabled: clockItem.showPowerMenu || clockItem.showWallpaperMenu || clockItem.showColorPicker
+      enabled: clockItem.showPowerMenu || clockItem.showWallpaperMenu || clockItem.showColorPicker || clockItem.showAppLauncher
       onClicked: {
         clockItem.showPowerMenu = false;
         clockItem.showWallpaperMenu = false;
+        clockItem.showAppLauncher = false;
         if (clockItem.showColorPicker && wallpaperSvc)
           wallpaperSvc.cancelPick();
       }
@@ -56,12 +57,13 @@ ShellRoot {
       visible: opacity > 0
 
       Behavior on opacity {
-        NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
+        NumberAnimation { duration: 300; easing.type: Easing.OutQuart }
       }
 
       latestNotification: notifService.latestNotification
       latestNotificationData: notifService.latestNotificationData
       storedNotifications: notifService.storedNotifications
+      appLauncherSvc: appLauncherSvc
       onNotifDismissed: (notifRef) => notifService.dismissBanner(notifRef)
       onNotifBannerDismissed: (notifRef) => notifService.dismissBanner(notifRef)
 
@@ -171,38 +173,6 @@ ShellRoot {
   }
   PanelWindow {
     anchors { top: true; left: true; right: true }
-    implicitHeight: clockItem.showAppLauncher ? 270 : 0
-    color: "transparent"
-    visible: clockItem.showAppLauncher
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.exclusiveZone: -1
-    WlrLayershell.focusable: true
-
-    MouseArea {
-      anchors.fill: parent
-      onClicked: clockItem.showAppLauncher = false
-    }
-
-    Item {
-      width: 480; height: 240
-      anchors.horizontalCenter: parent.horizontalCenter
-      anchors.top: parent.top
-      anchors.topMargin: 10
-
-      AppLauncher {
-        id: appLauncherOverlay
-        anchors.fill: parent
-        radius: 28
-        appService: appLauncherSvc
-        onCloseRequested: clockItem.showAppLauncher = false
-        onHoveredChanged: clockItem.appLauncherHovered = hovered
-      }
-    }
-  }
-
-  // Always-on-top battery state popup (visible over fullscreen apps)
-  PanelWindow {
-    anchors { top: true; left: true; right: true }
     implicitHeight: 70
     color: "transparent"
     visible: batteryPopup.opacity > 0
@@ -299,6 +269,12 @@ ShellRoot {
   Shortcut {
     sequences: ["Alt+F5"]
     onActivated: { modeSvc.cycleMode(); clockItem.showModeIndicator(); }
+    context: Qt.ApplicationShortcut
+  }
+
+  Shortcut {
+    sequences: ["Alt+C"]
+    onActivated: isControlCenterOpen = !isControlCenterOpen
     context: Qt.ApplicationShortcut
   }
 

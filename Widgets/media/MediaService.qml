@@ -91,18 +91,22 @@ QtObject {
   function previous() {
     transportProc.command = ["playerctl", "--player=playerctld", "previous"];
     transportProc.running = true;
+    metaTimer.restart();
   }
   function togglePlaying() {
     transportProc.command = ["playerctl", "--player=playerctld", "play-pause"];
     transportProc.running = true;
+    metaTimer.restart();
   }
   function next() {
     transportProc.command = ["playerctl", "--player=playerctld", "next"];
     transportProc.running = true;
+    metaTimer.restart();
   }
   function seek(seconds) {
     transportProc.command = ["playerctl", "--player=playerctld", "position", "" + seconds];
     transportProc.running = true;
+    metaTimer.restart();
   }
 
   function fetchMetadata() {

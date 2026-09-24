@@ -18,6 +18,7 @@ Item {
   property alias showWallpaperMenu: mainWidget.showWallpaperMenu
   property alias wallpaperSvc: mainWidget.wallpaperSvc
   property alias modeSvc: mainWidget.modeSvc
+  property alias appLauncherSvc: mainWidget.appLauncherSvc
   property alias askpassSvc: mainWidget.askpassSvc
   property alias fullScreenActive: mainWidget.fullScreenActive
 
