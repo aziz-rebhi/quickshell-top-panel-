@@ -1,224 +1,623 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "../../core"
+import Quickshell
+import qs.core
 
-Rectangle {
-  id: appLauncher
-  radius: parent?.radius ?? 28
-  color: Theme.background
-  clip: true
-  focus: true
+/*!
+  AppLauncher — Dynamic Island app launcher UI.
 
-  signal closeRequested()
-  property var appService: null
-  property bool hovered: false
-  property string searchText: ""
-  property int selectedIndex: 0
-
-  onVisibleChanged: {
-    if (visible) {
-      if (appService && appService.appModel && appService.appModel.length === 0) appService.rescan();
-      searchText = "";
-      selectedIndex = 0;
-      Qt.callLater(function() { appLauncher.forceActiveFocus(); });
+  Bind service from parent:
+    AppLauncher {
+      service: appLauncherService
+      active: showAppLauncher
+      onRequestClose: showAppLauncher = false
     }
-  }
 
-  function filteredApps() {
-    if (!appService || !appService.appModel) return [];
-    if (!searchText) return appService.appModel;
-    var q = searchText.toLowerCase();
-    var result = [];
-    for (var i = 0; i < appService.appModel.length; i++) {
-      if (appService.appModel[i].name.toLowerCase().indexOf(q) !== -1)
-        result.push(appService.appModel[i]);
+  Features:
+  - Fuzzy search with ranking (name, keywords, categories, id)
+  - Pins + recents when query is empty
+  - Category chips
+  - List / grid toggle
+  - Keyboard: type to search, Up/Down or Ctrl+J/K, Enter to launch, Esc to close
+  - Right-click (or pin button) to pin/unpin
+  - Lazy icons via service
+*/
+Item {
+    id: root
+
+    // ── external API (ClockWidget binds these) ──────────────────────────────
+    property var service: null   // AppLauncherService instance
+    property alias appService: root.service
+    property bool active: false
+    property bool hovered: false
+    signal requestClose()
+    signal closeRequested()
+    signal launched()
+
+    readonly property var svc: service
+    readonly property bool svcScanning: service ? service.scanning : false
+    readonly property string svcScanError: service ? (service.scanError || "") : ""
+
+    // ── local state ─────────────────────────────────────────────────────────
+    property string query: ""
+    property int selectedIndex: 0
+    property bool gridMode: false
+    property string category: "All"   // "All" or FreeDesktop category name
+    property var results: []
+
+    readonly property int maxVisibleList: 8
+    readonly property int gridColumns: 5
+
+    onActiveChanged: {
+        if (active) {
+            query = ""
+            category = "All"
+            selectedIndex = 0
+            rebuild()
+            Qt.callLater(() => searchField.forceActiveFocus())
+        }
     }
-    return result;
-  }
 
-  function launchSelected() {
-    var list = appLauncher.filteredApps();
-    if (list.length > 0 && appService) {
-      var idx = Math.min(appLauncher.selectedIndex, list.length - 1);
-      appService.launchApp(list[idx].desktopId);
+    Connections {
+        target: root.service
+        function onCatalogChanged() { if (root.active) root.rebuild() }
+        function onPinsChanged() { if (root.active) root.rebuild() }
     }
-  }
 
-  Keys.onPressed: (event) => {
-    if (event.key === Qt.Key_Escape) {
-      appLauncher.closeRequested();
-      event.accepted = true;
-    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-      appLauncher.launchSelected();
-      appLauncher.closeRequested();
-      event.accepted = true;
-    } else if (event.key === Qt.Key_Up) {
-      var list = appLauncher.filteredApps();
-      if (list.length > 0)
-        appLauncher.selectedIndex = Math.max(0, appLauncher.selectedIndex - 1);
-      event.accepted = true;
-    } else if (event.key === Qt.Key_Down) {
-      var list2 = appLauncher.filteredApps();
-      if (list2.length > 0)
-        appLauncher.selectedIndex = Math.min(list2.length - 1, appLauncher.selectedIndex + 1);
-      event.accepted = true;
-    } else if (event.key === Qt.Key_Backspace) {
-      if (searchText.length > 0) {
-        searchText = searchText.slice(0, -1);
-        selectedIndex = 0;
-      }
-      event.accepted = true;
-    } else if (event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32) {
-      if (!event.modifiers || event.modifiers === Qt.ShiftModifier) {
-        searchText += event.text;
-        selectedIndex = 0;
-        event.accepted = true;
-      }
+    function rebuild() {
+        if (!root.svc) {
+            results = []
+            return
+        }
+        if (category !== "All" && !query.trim()) {
+            results = root.svc.filterByCategory(category)
+        } else {
+            results = root.svc.search(query)
+        }
+        if (selectedIndex >= results.length)
+            selectedIndex = Math.max(0, results.length - 1)
+        if (results.length === 0)
+            selectedIndex = 0
     }
-  }
 
-  ColumnLayout {
-    anchors.fill: parent
-    anchors.margins: 12
-    spacing: 6
+    function moveSelection(delta) {
+        if (!results.length)
+            return
+        let next = selectedIndex + delta
+        if (next < 0)
+            next = results.length - 1
+        if (next >= results.length)
+            next = 0
+        selectedIndex = next
+        listView.positionViewAtIndex(selectedIndex, ListView.Contain)
+    }
 
+    function activateSelected() {
+        if (!results.length || !root.svc)
+            return
+        const app = results[selectedIndex]
+        if (!app || !app.id)
+            return
+        root.svc.launch(app.id)
+        root.launched()
+        root.close()
+    }
+
+    function close() {
+        root.requestClose()
+        root.closeRequested()
+    }
+
+    function pinSelected() {
+        if (!results.length || !root.svc)
+            return
+        const app = results[selectedIndex]
+        if (app && app.id)
+            root.svc.togglePin(app.id)
+    }
+
+    // ── chrome ──────────────────────────────────────────────────────────────
     Rectangle {
-      Layout.fillWidth: true
-      Layout.preferredHeight: 32
-      radius: 8
-      color: Theme.surfaceLight
-
-      RowLayout {
+        id: panel
         anchors.fill: parent
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        spacing: 6
+        color: Theme.background
+        radius: 28
+        clip: true
 
-        Text {
-          text: "󰊯"
-          color: Theme.subtext
-          font { family: "JetBrainsMono Nerd Font"; pixelSize: 14 }
-        }
-
-        Text {
-          Layout.fillWidth: true
-          color: searchText ? Theme.text : Theme.subtext
-          text: searchText || "Search apps…"
-          font { family: "Inter"; pixelSize: 12 }
-          verticalAlignment: Text.AlignVCenter
-          elide: Text.ElideRight
-        }
-
-        Text {
-          visible: searchText.length > 0
-          text: "󰁨"
-          color: Theme.subtext
-          font { family: "JetBrainsMono Nerd Font"; pixelSize: 12 }
-          MouseArea {
+        ColumnLayout {
             anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              searchText = "";
-              selectedIndex = 0;
-              appLauncher.forceActiveFocus();
+            anchors.margins: 10
+            spacing: 8
+
+            // Search row
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: "󰍉"  // search nf icon
+                    font.family: Fonts.mono
+                    font.pixelSize: 16
+                    color: Theme.subtext
+                }
+
+                TextInput {
+                    id: searchField
+                    Layout.fillWidth: true
+                    color: Theme.text
+                    font.family: Fonts.main
+                    font.pixelSize: 14
+                    selectByMouse: true
+                    clip: true
+                    text: root.query
+                    onTextChanged: {
+                        if (text !== root.query) {
+                            root.query = text
+                            root.selectedIndex = 0
+                            root.rebuild()
+                        }
+                    }
+
+                    Text {
+                        anchors.fill: parent
+                        verticalAlignment: Text.AlignVCenter
+                        text: root.svcScanning ? "Scanning apps…" : "Search apps…"
+                        color: Theme.subtext
+                        font: searchField.font
+                        visible: !searchField.text && !searchField.activeFocus
+                        opacity: 0.6
+                    }
+
+                    Keys.onPressed: function (event) {
+                        if (event.key === Qt.Key_Down || (event.key === Qt.Key_J && event.modifiers & Qt.ControlModifier)) {
+                            root.moveSelection(1)
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Up || (event.key === Qt.Key_K && event.modifiers & Qt.ControlModifier)) {
+                            root.moveSelection(-1)
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            root.activateSelected()
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Escape) {
+                            root.close()
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Tab) {
+                            root.gridMode = !root.gridMode
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_P && event.modifiers & Qt.ControlModifier) {
+                            root.pinSelected()
+                            event.accepted = true
+                        }
+                    }
+                }
+
+                // Grid / list toggle
+                Rectangle {
+                    width: 28
+                    height: 28
+                    radius: 8
+                    color: gridBtn.containsMouse ? Theme.surfaceHover || Theme.surfaceBright : "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.gridMode ? "󰯋" : "󰡫"  // list vs grid
+                        font.family: Fonts.mono
+                        font.pixelSize: 14
+                        color: Theme.subtext
+                    }
+                    MouseArea {
+                        id: gridBtn
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.gridMode = !root.gridMode
+                    }
+                }
+
+                // Rescan
+                Rectangle {
+                    width: 28
+                    height: 28
+                    radius: 8
+                    color: rescanBtn.containsMouse ? Theme.surfaceHover || Theme.surfaceBright : "transparent"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰑓"
+                        font.family: Fonts.mono
+                        font.pixelSize: 14
+                        color: root.svcScanning ? Theme.accent || Theme.primary : Theme.subtext
+                        RotationAnimator on rotation {
+                            running: root.svcScanning
+                            from: 0
+                            to: 360
+                            duration: 900
+                            loops: Animation.Infinite
+                        }
+                    }
+                    MouseArea {
+                        id: rescanBtn
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (root.svc) root.svc.rescan()
+                    }
+                }
             }
-          }
-        }
-      }
 
-      MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.IBeamCursor
-        onClicked: appLauncher.forceActiveFocus()
-      }
-    }
+            // Category chips (hidden while searching)
+            Flickable {
+                id: chipFlick
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.query.trim() ? 0 : 28
+                visible: height > 0
+                contentWidth: chipRow.width
+                clip: true
+                interactive: contentWidth > width
+                flickableDirection: Flickable.HorizontalFlick
 
-    ListView {
-      id: appList
-      Layout.fillWidth: true
-      Layout.fillHeight: true
-      clip: true
-      spacing: 2
+                Behavior on Layout.preferredHeight {
+                    NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                }
 
-      model: appLauncher.filteredApps()
-      currentIndex: appLauncher.selectedIndex
+                Row {
+                    id: chipRow
+                    spacing: 6
+                    Repeater {
+                        model: {
+                            const main = ["All", "Network", "AudioVideo", "Development", "Office",
+                                          "Graphics", "Game", "System", "Utility", "Settings"]
+                            const available = { "All": true }
+                            if (root.svc) {
+                                const cats = root.svc.allCategories()
+                                for (let i = 0; i < cats.length; i++)
+                                    available[cats[i]] = true
+                            }
+                            return main.filter(c => available[c] || c === "All")
+                        }
+                        delegate: Rectangle {
+                            required property string modelData
+                            height: 26
+                            width: chipLabel.implicitWidth + 16
+                            radius: 13
+                            color: root.category === modelData ? Theme.accent || Theme.primary : Theme.surfaceHover || Theme.surfaceBright
+                            opacity: chipMa.containsMouse || root.category === modelData ? 1 : 0.85
 
-      onCountChanged: {
-        if (appLauncher.selectedIndex >= count)
-          appLauncher.selectedIndex = Math.max(0, count - 1);
-      }
-
-      delegate: Rectangle {
-        width: appList.width
-        height: 32
-        radius: 6
-        color: appList.currentIndex === index ? Theme.surfaceHover : (itemMouse.containsMouse ? Theme.surfaceLight : "transparent")
-        Behavior on color { ColorAnimation { duration: 80 } }
-
-        RowLayout {
-          anchors.fill: parent
-          anchors.leftMargin: 8
-          anchors.rightMargin: 8
-          spacing: 8
-
-          Item {
-            width: 24; height: 24
-            Image {
-              id: appIcon
-              anchors.fill: parent
-              source: {
-                var ic = modelData.icon;
-                if (!ic || ic.indexOf("/") === -1) return "";
-                return "file://" + ic;
-              }
-              fillMode: Image.PreserveAspectFit
-              asynchronous: true
-              visible: status === Image.Ready
+                            Text {
+                                id: chipLabel
+                                anchors.centerIn: parent
+                                text: {
+                                    const map = {
+                                        "All": "All",
+                                        "Network": "Internet",
+                                        "AudioVideo": "Media",
+                                        "Development": "Dev",
+                                        "Office": "Office",
+                                        "Graphics": "Graphics",
+                                        "Game": "Games",
+                                        "System": "System",
+                                        "Utility": "Utils",
+                                        "Settings": "Settings"
+                                    }
+                                    return map[modelData] || modelData
+                                }
+                                font.family: Fonts.main
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                                color: root.category === modelData ? (Theme.primaryFg || Theme.background) : Theme.text
+                            }
+                            MouseArea {
+                                id: chipMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.category = modelData
+                                    root.selectedIndex = 0
+                                    root.rebuild()
+                                }
+                            }
+                        }
+                    }
+                }
             }
+
+            // Results
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                // Empty / loading / error
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 6
+                    visible: !root.results.length
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: root.svcScanning ? "󰔟" : (root.svcScanError ? "󰅙" : "󰍉")
+                        font.family: Fonts.mono
+                        font.pixelSize: 28
+                        color: Theme.subtext
+                        opacity: 0.5
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: {
+                            if (root.svcScanning)
+                                return "Scanning applications…"
+                            if (root.svcScanError)
+                                return "Scan failed — click rescan"
+                            if (root.query.trim())
+                                return "No matches for \"" + root.query + "\""
+                            return "No applications found"
+                        }
+                        font.family: Fonts.main
+                        font.pixelSize: 12
+                        color: Theme.subtext
+                    }
+                }
+
+                // List mode
+                ListView {
+                    id: listView
+                    anchors.fill: parent
+                    visible: !root.gridMode && root.results.length > 0
+                    clip: true
+                    model: root.results
+                    currentIndex: root.selectedIndex
+                    spacing: 2
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                        width: 4
+                    }
+
+                    delegate: Rectangle {
+                        id: row
+                        required property var modelData
+                        required property int index
+                        width: listView.width
+                        height: 40
+                        radius: 10
+                        color: {
+                            if (index === root.selectedIndex)
+                                return Theme.accent || Theme.primary
+                            if (rowMa.containsMouse)
+                                return Theme.surfaceHover || Theme.surfaceBright
+                            return "transparent"
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 10
+
+                            // Icon
+                            Item {
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 28
+                                Image {
+                                    id: appIcon
+                                    anchors.fill: parent
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                    smooth: true
+                                    source: {
+                                        const name = modelData.icon || ""
+                                        if (name.startsWith("/"))
+                                            return "file://" + name
+                                        const resolved = root.svc.iconPath(name)
+                                        return resolved ? ("file://" + resolved) : ""
+                                    }
+                                    visible: status === Image.Ready
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: appIcon.status !== Image.Ready
+                                    text: "󰘔"
+                                    font.family: Fonts.mono
+                                    font.pixelSize: 18
+                                    color: index === root.selectedIndex ? (Theme.primaryFg || Theme.background) : Theme.subtext
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 1
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.name || modelData.id
+                                    elide: Text.ElideRight
+                                    font.family: Fonts.main
+                                    font.pixelSize: 13
+                                    font.weight: Font.Medium
+                                    color: index === root.selectedIndex ? (Theme.primaryFg || Theme.background) : Theme.text
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: !!(modelData.genericName || modelData.comment || modelData.flatpak)
+                                    text: {
+                                        const bits = []
+                                        if (modelData.flatpak)
+                                            bits.push("Flatpak")
+                                        if (modelData.genericName)
+                                            bits.push(modelData.genericName)
+                                        else if (modelData.comment)
+                                            bits.push(modelData.comment)
+                                        return bits.join(" · ")
+                                    }
+                                    elide: Text.ElideRight
+                                    font.family: Fonts.main
+                                    font.pixelSize: 10
+                                    color: index === root.selectedIndex ? (Theme.primaryFg || Theme.background) : Theme.subtext
+                                    opacity: 0.85
+                                }
+                            }
+
+                            // Pin indicator / button
+                            Text {
+                                text: root.svc.isPinned(modelData.id) ? "󰐃" : "󰐄"
+                                font.family: Fonts.mono
+                                font.pixelSize: 14
+                                color: index === root.selectedIndex ? (Theme.primaryFg || Theme.background) : Theme.subtext
+                                opacity: root.svc.isPinned(modelData.id) || pinMa.containsMouse ? 1 : 0.35
+                                MouseArea {
+                                    id: pinMa
+                                    anchors.fill: parent
+                                    anchors.margins: -6
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.svc.togglePin(modelData.id)
+                                }
+                            }
+                        }
+
+                        MouseArea {
+                            id: rowMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            cursorShape: Qt.PointingHandCursor
+                            onPositionChanged: root.selectedIndex = index
+                            onClicked: function (mouse) {
+                                root.selectedIndex = index
+                                if (mouse.button === Qt.RightButton)
+                                    root.svc.togglePin(modelData.id)
+                                else {
+                                    root.activateSelected()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Grid mode
+                GridView {
+                    id: gridView
+                    anchors.fill: parent
+                    visible: root.gridMode && root.results.length > 0
+                    clip: true
+                    model: root.results
+                    cellWidth: Math.floor(width / root.gridColumns)
+                    cellHeight: 78
+                    currentIndex: root.selectedIndex
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    delegate: Rectangle {
+                        id: cell
+                        required property var modelData
+                        required property int index
+                        width: gridView.cellWidth - 4
+                        height: gridView.cellHeight - 4
+                        radius: 12
+                        color: {
+                            if (index === root.selectedIndex)
+                                return Theme.accent || Theme.primary
+                            if (cellMa.containsMouse)
+                                return Theme.surfaceHover || Theme.surfaceBright
+                            return "transparent"
+                        }
+
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            width: parent.width - 8
+
+                            Item {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 36
+                                height: 36
+                                Image {
+                                    id: gIcon
+                                    anchors.fill: parent
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                    source: {
+                                        const name = modelData.icon || ""
+                                        if (name.startsWith("/"))
+                                            return "file://" + name
+                                        const resolved = root.svc.iconPath(name)
+                                        return resolved ? ("file://" + resolved) : ""
+                                    }
+                                    visible: status === Image.Ready
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: gIcon.status !== Image.Ready
+                                    text: "󰘔"
+                                    font.family: Fonts.mono
+                                    font.pixelSize: 22
+                                    color: index === root.selectedIndex ? (Theme.primaryFg || Theme.background) : Theme.subtext
+                                }
+                            }
+                            Text {
+                                width: parent.width
+                                horizontalAlignment: Text.AlignHCenter
+                                text: modelData.name || modelData.id
+                                elide: Text.ElideRight
+                                maximumLineCount: 2
+                                wrapMode: Text.Wrap
+                                font.family: Fonts.main
+                                font.pixelSize: 10
+                                color: index === root.selectedIndex ? (Theme.primaryFg || Theme.background) : Theme.text
+                            }
+                        }
+
+                        // Pin badge
+                        Text {
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.margins: 4
+                            visible: root.svc.isPinned(modelData.id)
+                            text: "󰐃"
+                            font.family: Fonts.mono
+                            font.pixelSize: 11
+                            color: index === root.selectedIndex ? (Theme.primaryFg || Theme.background) : Theme.accent || Theme.primary
+                        }
+
+                        MouseArea {
+                            id: cellMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            cursorShape: Qt.PointingHandCursor
+                            onPositionChanged: root.selectedIndex = index
+                            onClicked: function (mouse) {
+                                root.selectedIndex = index
+                                if (mouse.button === Qt.RightButton)
+                                    root.svc.togglePin(modelData.id)
+                                else
+                                    root.activateSelected()
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Footer hint
             Text {
-              anchors.centerIn: parent
-              text: "󰀻"
-              color: appList.currentIndex === index ? Theme.primary : Theme.text
-              opacity: appIcon.visible ? 0 : (appList.currentIndex === index ? 1 : 0.5)
-              font { family: "JetBrainsMono Nerd Font"; pixelSize: 14 }
+                Layout.fillWidth: true
+                text: "↵ open   ⌃J/K move   ⌃P pin   Tab grid   Esc close"
+                font.family: Fonts.mono
+                font.pixelSize: 10
+                color: Theme.subtext
+                opacity: 0.55
+                horizontalAlignment: Text.AlignHCenter
             }
-          }
-
-          Text {
-            text: modelData.name
-            color: Theme.text
-            elide: Text.ElideRight
-            font { family: "Inter"; pixelSize: 12; weight: appList.currentIndex === index ? 600 : 500 }
-            Layout.fillWidth: true
-          }
         }
-
-        MouseArea {
-          id: itemMouse
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onEntered: {
-            appLauncher.hovered = true;
-            appLauncher.selectedIndex = index;
-          }
-          onExited: appLauncher.hovered = false
-          onClicked: {
-            appLauncher.selectedIndex = index;
-            appLauncher.launchSelected();
-          }
-        }
-      }
-
-      ScrollBar.vertical: ScrollBar {
-        width: 4
-        policy: ScrollBar.AsNeeded
-        contentItem: Rectangle {
-          radius: 2
-          color: Theme.border
-        }
-      }
     }
-  }
+
+    // Keep selection visible when results change
+    onResultsChanged: {
+        if (selectedIndex >= results.length)
+            selectedIndex = Math.max(0, results.length - 1)
+    }
+
+    MouseArea {
+        id: hoverArea
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+        onContainsMouseChanged: root.hovered = containsMouse
+    }
 }

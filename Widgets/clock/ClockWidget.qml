@@ -853,7 +853,9 @@ Rectangle {
     id: appLauncherOverlay
     anchors.fill: parent
     visible: clockWidget.showAppLauncher
-    appService: clockWidget.appLauncherSvc
+    active: clockWidget.showAppLauncher
+    service: clockWidget.appLauncherSvc
+    onRequestClose: clockWidget.showAppLauncher = false
     onCloseRequested: clockWidget.showAppLauncher = false
     onHoveredChanged: clockWidget.appLauncherHovered = hovered
   }

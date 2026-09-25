@@ -63,7 +63,7 @@ ShellRoot {
       latestNotification: notifService.latestNotification
       latestNotificationData: notifService.latestNotificationData
       storedNotifications: notifService.storedNotifications
-      appLauncherSvc: appLauncherSvc
+      appLauncherSvc: appLauncherService
       onNotifDismissed: (notifRef) => notifService.dismissBanner(notifRef)
       onNotifBannerDismissed: (notifRef) => notifService.dismissBanner(notifRef)
 
@@ -260,7 +260,8 @@ ShellRoot {
 
   WallpaperService { id: wallpaperSvc }
 
-  AppLauncherService { id: appLauncherSvc }
+  AppLauncherService { id: appLauncherService
+ }
 
   ModeService { id: modeSvc }
 
