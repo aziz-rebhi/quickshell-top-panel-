@@ -1,24 +1,19 @@
 import glob
 
+from . import sensors
+
 
 def cpu_temp():
-    """k10temp is the trusted sensor (acpitz reads stuck ~100C on this box)."""
-    for d in glob.glob("/sys/class/hwmon/hwmon*"):
-        try:
-            if open(d + "/name").read().strip() == "k10temp":
-                return int(open(d + "/temp1_input").read().strip()) / 1000.0
-        except Exception:
-            continue
-    for d in glob.glob("/sys/class/hwmon/hwmon*"):
-        for i in range(1, 8):
-            try:
-                return int(open(f"{d}/temp{i}_input").read().strip()) / 1000.0
-            except Exception:
-                pass
-    return None
+    """CPU package temperature in °C from the discovered k10temp / zenpower /
+    coretemp hwmon. Never falls back to an unrelated sensor: a wrong but
+    plausible temperature is worse than no reading (the guard would ease the
+    policy for a hot GPU). Returns None when nothing is readable."""
+    return sensors.cpu_temp_c()
 
 
 def zones():
+    """Every readable hwmon temperature, for `doctor`. Diagnostic only —
+    callers must not use this as the CPU temperature."""
     out = []
     for d in glob.glob("/sys/class/hwmon/hwmon*"):
         try:

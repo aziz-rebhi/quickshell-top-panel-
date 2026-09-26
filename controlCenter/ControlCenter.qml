@@ -43,6 +43,7 @@ PanelWindow {
         } else {
             wifiPendingSsid = "";
             wifiConnectError = "";
+            wifiForgetError = "";
         }
     }
 
@@ -212,6 +213,11 @@ PanelWindow {
     property string wifiName: "Disconnected"
     property string wifiSecurity: ""
     property var wifiNetworks: []
+    // Every saved profile, keyed by UUID, whether or not it is in range.
+    // The scan list only shows what `nmcli dev wifi list` can see, so without
+    // this a saved network that has moved out of range (a phone hotspot, say)
+    // could never be forgotten.
+    property var wifiSaved: []
     property bool wifiScanning: false
 
     Process {
@@ -254,33 +260,73 @@ PanelWindow {
 
     Process {
         id: wifiScanProc
-        command: ["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan yes 2>/dev/null; echo '---SAVED---'; nmcli -t -f NAME,TYPE connection show | while read -r line; do name=${line%:*}; type=${line##*:}; if [ \"$type\" = \"802-11-wireless\" ]; then nmcli -g 802-11-wireless.ssid connection show \"$name\" 2>/dev/null; fi; done"]
+        // Second half emits "<uuid>:<ssid>" per saved wireless profile. The UUID
+        // is the leading field because it never contains a colon, whereas a
+        // profile *name* does and would need the terse-mode backslash escaping
+        // to parse back. Forgetting deletes by UUID, so the UUID has to survive
+        // the round trip.
+        command: ["sh", "-c", "nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan yes 2>/dev/null; echo '---SAVED---'; nmcli -t -f UUID,TYPE connection show | while IFS=: read -r uuid type; do [ \"$type\" = \"802-11-wireless\" ] || continue; ssid=$(nmcli -g 802-11-wireless.ssid connection show \"$uuid\" 2>/dev/null); [ -n \"$ssid\" ] && printf '%s:%s\\n' \"$uuid\" \"$ssid\"; done"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const savedMap = {};
+                // ssid -> uuid. First profile wins so a row keeps pointing at
+                // the same profile across polls when one SSID has several.
+                const savedBySsid = {};
                 const savedSeg = this.text.split("---SAVED---");
                 if (savedSeg.length > 1) {
                     for (const l of savedSeg[1].split("\n")) {
                         const s = l.trim();
-                        if (s) savedMap[s] = true;
+                        const cut = s.indexOf(":");
+                        if (cut < 1) continue;
+                        const ssid = s.slice(cut + 1);
+                        if (!ssid) continue;
+                        if (!(ssid in savedBySsid)) savedBySsid[ssid] = s.slice(0, cut);
                     }
                 }
-                const lines = savedSeg[0].split("\n").filter(l => l.trim().length > 0);
-                const seen = {};
+                // Terse mode escapes a colon inside an SSID as "\:", so a plain
+                // split(":") truncates that SSID and mis-reads every field after
+                // it (security lands in the signal slot and so on). Match the
+                // four fields from the left instead, treating "\:" as part of
+                // the SSID. The fourth separator is required, so a malformed
+                // line is dropped rather than turned into a garbage row.
+                const scanLine = /^(.)?:((?:\\.|[^\\:])*):(\d+):(.*)$/;
+                const lines = savedSeg[0].split("\n");
+                const inRange = {};
                 const list = [];
-                for (const line of lines) {
-                    const fields = line.split(":");
-                    if (fields.length < 4) continue;
-                    const inUse = fields[0] === "*";
-                    const ssid = fields[1];
-                    const signal = parseInt(fields[2]) || 0;
-                    const security = fields[3];
-                    if (!ssid || seen[ssid]) continue;
-                    seen[ssid] = true;
-                    list.push({ ssid: ssid, signal: signal, security: security, active: inUse, saved: !!savedMap[ssid] });
+                for (const raw of lines) {
+                    const m = raw.match(scanLine);
+                    if (!m) continue;
+                    const active = (m[1] || " ") === "*";
+                    const ssid = m[2].replace(/\\:/g, ":");
+                    if (!ssid || ssid in inRange) continue;
+                    const signal = parseInt(m[3]) || 0;
+                    const security = m[4];
+                    inRange[ssid] = { signal: signal, security: security, active: active };
+                    list.push({ ssid: ssid, signal: signal, security: security, active: active, saved: ssid in savedBySsid });
                 }
                 list.sort((a, b) => b.signal - a.signal);
                 controlCenter.wifiNetworks = list.filter(n => !n.active);
+
+                // Saved profiles, in range or not: the connected one first,
+                // then whatever else is reachable by signal, then the rest.
+                const savedList = [];
+                for (const ssid in savedBySsid) {
+                    const hit = inRange[ssid];
+                    savedList.push({
+                        ssid: ssid,
+                        uuid: savedBySsid[ssid],
+                        signal: hit ? hit.signal : 0,
+                        inRange: !!hit,
+                        active: hit ? hit.active : false,
+                        security: hit ? hit.security : ""
+                    });
+                }
+                savedList.sort((a, b) => {
+                    if (a.active !== b.active) return a.active ? -1 : 1;
+                    if (a.inRange !== b.inRange) return a.inRange ? -1 : 1;
+                    if (a.inRange) return b.signal - a.signal;
+                    return a.ssid.localeCompare(b.ssid);
+                });
+                controlCenter.wifiSaved = savedList;
                 controlCenter.wifiScanning = false;
             }
         }
@@ -302,6 +348,7 @@ PanelWindow {
 
     property string wifiPendingSsid: ""
     property string wifiConnectError: ""
+    property string wifiForgetError: ""
     property bool wifiConnecting: false
 
     function connectToWifi(ssid, security, password) {
@@ -341,12 +388,37 @@ PanelWindow {
     Process { id: wifiDisconnectProc }
     Timer { id: refreshWifiDelay; interval: 600; onTriggered: { controlCenter.refreshWifi(); controlCenter.scanWifi(); } }
 
-    function forgetWifi(ssid) {
-        forgetProc.command = ["nmcli", "connection", "delete", "id", ssid];
+    // Deletes by UUID, never by `id <ssid>`. `nmcli connection delete id`
+    // matches the profile *name*, which nmcli silently rewrites to "Name 1"
+    // when a second profile is saved for the same SSID and which the user can
+    // rename freely — so matching on it can remove the wrong profile or
+    // nothing at all. The UUID is the only stable handle.
+    function forgetWifi(ssid, uuid) {
+        wifiForgetError = "";
+        if (!uuid) {
+            wifiForgetError = "Couldn't identify that network's saved profile.";
+            return;
+        }
+        if (ssid === wifiName) {
+            wifiCurrentPassword = "";
+            wifiQrPath = "";
+        }
+        forgetProc.command = ["nmcli", "connection", "delete", "uuid", uuid];
         forgetProc.running = true;
         refreshWifiDelay.start();
     }
-    Process { id: forgetProc }
+
+    Process {
+        id: forgetProc
+        stdout: StdioCollector {}
+        stderr: StdioCollector {
+            onStreamFinished: {
+                const msg = this.text.trim();
+                if (msg !== "")
+                    controlCenter.wifiForgetError = "Forget failed — " + msg.split("\n")[0];
+            }
+        }
+    }
 
     property string wifiCurrentPassword: ""
     property bool wifiPasswordRevealed: false
@@ -447,6 +519,10 @@ PanelWindow {
     }
 
     // --- Mode Service ---
+    // The Performance page is the only consumer of the state.json poll and the
+    // hardware probe, and it sets `modeSvc.pageActive` to match its own
+    // visibility, so leaving the page does not leave a 2s probe loop running
+    // behind a closed panel.
     property var modeSvc: null
 
     // --- Night Light ---
@@ -791,17 +867,20 @@ PanelWindow {
                 wifiName: controlCenter.wifiName
                 wifiSecurity: controlCenter.wifiSecurity
                 wifiNetworks: controlCenter.wifiNetworks
+                wifiSaved: controlCenter.wifiSaved
                 wifiScanning: controlCenter.wifiScanning
                 wifiConnecting: controlCenter.wifiConnecting
                 wifiQrPath: controlCenter.wifiQrPath
                 wifiCurrentPassword: controlCenter.wifiCurrentPassword
                 wifiPendingSsid: controlCenter.wifiPendingSsid
                 wifiConnectError: controlCenter.wifiConnectError
+                wifiForgetError: controlCenter.wifiForgetError
                 onToggleWifi: controlCenter.toggleWifi()
                 onScanWifi: controlCenter.scanWifi()
                 onConnectToWifi: (ssid, security, pw) => controlCenter.connectToWifi(ssid, security, pw)
                 onLoadCurrentWifiPassword: controlCenter.loadCurrentWifiPassword()
                 onDisconnectWifi: controlCenter.disconnectWifi()
+                onForgetWifi: (ssid, uuid) => controlCenter.forgetWifi(ssid, uuid)
                 onGenerateWifiQr: controlCenter.generateWifiQr()
                 onRequestPassword: (ssid) => { controlCenter.wifiConnectError = ""; controlCenter.wifiPendingSsid = ssid; }
                 onCancelPassword: () => { controlCenter.wifiConnectError = ""; controlCenter.wifiPendingSsid = ""; }
@@ -876,6 +955,7 @@ PanelWindow {
               Layout.fillHeight: true
               clip: true
               modeSvc: controlCenter.modeSvc
+              pageActive: controlCenter.isOpen && controlCenter.page === "mode"
               onSetMode: (m) => { if (controlCenter.modeSvc) controlCenter.modeSvc.setMode(m); }
               onBackRequested: controlCenter.page = "main"
             }

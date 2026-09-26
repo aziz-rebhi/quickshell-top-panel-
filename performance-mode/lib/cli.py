@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-from . import apply, doctor, thermal
+from . import apply, doctor, sensors, thermal
 from .common import elevate, load_config, log, state_read, state_write
 
 MODES = ["silent", "balanced", "performance", "gaming", "ai"]
@@ -75,6 +75,32 @@ def cmd_toggle():
     apply.apply_mode(nxt)
 
 
+def cmd_discover(refresh=False, json_out=False):
+    """Resolve hwmon / power_supply paths by driver name. Read-only, never
+    elevates: the panel calls this instead of hardcoding hwmonN."""
+    c = sensors.discover(force=refresh)
+    if json_out:
+        print(json.dumps(c, indent=2))
+        return 0
+    print("== sensor discovery ==")
+    print(f"cpu temp  : {c.get('cpu_temp') or '(none)'}  [{c.get('cpu_temp_name') or '-'}]")
+    print(f"igpu temp : {c.get('igpu_temp') or '(none)'}  [{c.get('igpu_temp_name') or '-'}]")
+    print(f"igpu load : {c.get('igpu_busy') or '(none)'}")
+    names = c.get("fan_names") or []
+    fans = c.get("fans") or []
+    if fans:
+        for n, p in zip(names, fans):
+            print(f"fan       : {p}  [{n}]")
+    else:
+        print("fan       : (none — hwmon exposes no fan*_input; nbfc is authoritative)")
+    print(f"ac        : {', '.join(c.get('mains') or []) or '(none)'}")
+    print(f"battery   : {c.get('battery') or '(none)'}  [{c.get('battery_name') or '-'}]")
+    print(f"cache     : {sensors.cache_path()}")
+    t = thermal.cpu_temp()
+    print(f"cpu_temp  : {t:.1f}°C" if t is not None else "cpu_temp  : N/A")
+    return 0
+
+
 def cmd_watch():
     cfg = load_config()
     th = cfg.get("thermal", {})
@@ -126,6 +152,11 @@ def main():
     sp_set.add_argument("mode")
     sub.add_parser("toggle", help="cycle to the next mode (root)")
     sub.add_parser("doctor", help="diagnose the system")
+    sp_discover = sub.add_parser(
+        "discover", help="resolve sensor paths by driver name (read-only)")
+    sp_discover.add_argument("--json", action="store_true")
+    sp_discover.add_argument("--refresh", action="store_true",
+                             help="ignore the cache and re-scan sysfs")
     sub.add_parser("watch", help="restore-on-boot state init (run by systemd, root)")
 
     a = p.parse_args()
@@ -148,6 +179,8 @@ def main():
         cmd_toggle()
     elif a.cmd == "doctor":
         doctor.report()
+    elif a.cmd == "discover":
+        return cmd_discover(refresh=a.refresh, json_out=a.json)
     elif a.cmd == "watch":
         cmd_watch()
     return 0

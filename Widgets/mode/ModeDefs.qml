@@ -69,7 +69,10 @@ QtObject {
       name: "Gaming",
       tag: "Low latency",
       subtitle: "Low-latency gaming with consistent frame times.",
-      chips: ["NVIDIA", "GameMode"],
+      // "if installed" is honest in both worlds: gamemode is an optional
+      // dependency, so the chip never promises a tweak that isn't there and
+      // never reads as a failure either.
+      chips: ["NVIDIA", "GameMode if installed"],
       profile: 80,
       config: [
         ["CPU Policy", "Performance"],

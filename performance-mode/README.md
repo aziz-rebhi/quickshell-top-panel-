@@ -28,9 +28,20 @@ performance-mode current           # active mode name (for scripts/QML)
 performance-mode list
 performance-mode set <mode>        # apply (auto-elevates via sudo)
 performance-mode toggle            # cycle to next mode
+performance-mode discover [--json] [--refresh]   # resolve sensor paths by driver name (read-only)
 performance-mode doctor            # full system diagnosis
 performance-mode watch             # restore-on-boot state init (run by systemd)
 ```
+
+`discover` is read-only and never elevates. It resolves hwmon / power_supply
+paths by driver *name* (`k10temp`/`zenpower`/`coretemp`, `amdgpu`, any hwmon
+with `fan*_input`, `type=Mains`/`type=Battery`) and caches the result in
+`$XDG_CACHE_HOME/performance-mode/sensors.json`. The cache is re-validated on
+every read and rebuilt when a recorded path disappears, so `hwmonN` renumbering
+after a reboot heals itself instead of silently reading the wrong chip. The
+Quickshell monitor calls it once and interpolates the resolved paths into its
+own probe, so the panel and the controller can never disagree about which
+sensor is which.
 
 ## Install
 
@@ -46,17 +57,24 @@ This installs:
 
 ## QML integration
 
-- `Widgets/mode/ModeService.qml` — thin client: reads `/var/lib/performance-mode/state.json`,
-  calls the CLI for set/cycle. No QML-side state logic.
-- `controlCenter/pages/ModePage.qml` — 5 mode cards.
+- `Widgets/mode/ModeService.qml` — thin client: polls `/var/lib/performance-mode/state.json`
+  (1.2s while the Performance page is open or a switch is applying, 6s otherwise), calls the
+  CLI for set/cycle. No QML-side state logic.
+- `Widgets/mode/MonitorService.qml` — live hardware probe. Sensor paths come from
+  `discover --json`, not from hardcoded `hwmonN`; poll rate follows page visibility
+  (2s active, 8s idle). Unreadable sensors report as unavailable, never as a value.
+- `controlCenter/pages/ModePage.qml` — 5 mode cards, live bars, requested→effective
+  readback, per-lever results, diagnostics, switch history.
 - `shell.qml` — `Alt+F5` / `/tmp/qs-mode-cycle` → `cycleMode()` (cycles all 5).
 
 ## Safety rules (baked in)
 
 - Never disables zram, earlyoom, networking, audio, Wayland, NVMe, or stops critical services.
 - Every step is idempotent and reversible; an unsupported feature logs a WARNING and continues.
-- No automatic switching in v1 (modes only change when you ask).
-- k10temp is the trusted temp sensor (acpitz reads a stuck ~100°C on this laptop).
+- The thermal guard never rewrites the selected mode: it eases the *effective* policy and leaves
+  the `requested` block in `state.json` intact, so the original intent survives every mitigation.
+- CPU temperature comes only from a recognised CPU driver. `acpitz` (stuck ~100°C on this
+  laptop), `nvme`, and fan-controller hwmons are explicitly excluded from the fallback.
 
 ## Security note
 

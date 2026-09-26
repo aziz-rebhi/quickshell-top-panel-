@@ -66,6 +66,32 @@ def thermal_spec():
     }
 
 
+def requested(cfg):
+    """What the mode asked for, in the same vocabulary `effective()` reads
+    back. The panel compares the two to show requested-vs-effective; the
+    thermal guard never touches this block, so the original intent survives
+    every mitigation."""
+    def s(v):
+        return "" if v is None else str(v)
+
+    boost = cfg.get("boost")
+    persist = cfg.get("nvidia_persistence")
+    fan_speed = cfg.get("fan_speed")
+    return {
+        "governor": s(cfg.get("governor")),
+        "boost": "" if boost is None else ("1" if boost else "0"),
+        "fan_curve": ("Manual %d%%" % int(fan_speed)) if fan_speed else "Automatic",
+        "nvidia_runtime_pm": s(cfg.get("nvidia_control")),
+        "nvidia_persistence": ("" if persist is None else
+                               ("enabled" if persist else "disabled")),
+        "power_profile": s(cfg.get("power_profile")),
+        "swappiness": s(cfg.get("swappiness")),
+        "page_cluster": s(cfg.get("page_cluster")),
+        "vfs_cache_pressure": s(cfg.get("vfs_cache_pressure")),
+        "gamemode": "available" if cfg.get("use_gamemode") else "",
+    }
+
+
 def apply_mode(mode):
     cfg = load_config()
     m = cfg["mode"].get(mode)
@@ -80,7 +106,13 @@ def apply_mode(mode):
         except Exception as e:
             ok, note = False, str(e)
         status = _classify(ok, note)
-        applied[name] = "ok" if ok else "failed"
+        # `applied` is the coarse summary scripts and `status` read. Recording
+        # an optional-but-missing lever as "failed" made `performance-mode
+        # status` print "failed: GameMode" and the switch log warn about it,
+        # for a switch that in fact succeeded. The detailed `levers` block
+        # below still says "unsupported", and `failed` filters on the literal
+        # "failed" value, so this only removes the false alarm.
+        applied[name] = status
         levers[name] = {"status": status, "note": note or ""}
         log(f"{name}: {status}" + (f" — {note}" if note else ""))
     spec = thermal_spec()
@@ -89,6 +121,7 @@ def apply_mode(mode):
         "previous": prev,
         "applied": applied,
         "levers": levers,
+        "requested": requested(m),
         "effective": effective(),
         "thermal": {
             "active": False,

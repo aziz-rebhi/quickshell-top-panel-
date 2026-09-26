@@ -25,20 +25,6 @@ def set_fan(speed):
     return True, ""
 
 
-def effective():
-    """What the fan controller is doing right now: Automatic / Manual curve / n/a."""
-    if not _has_nbfc():
-        return "n/a"
-    rc, out, err = run(["nbfc", "status"])
-    if rc != 0:
-        return "n/a"
-    for line in out.splitlines():
-        if line.startswith("Status:"):
-            st = line.split(":", 1)[1].strip()
-            return st
-    return "n/a"
-
-
 def status():
     if not _has_nbfc():
         return "nbfc not installed"
